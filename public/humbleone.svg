@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">HumbleOne Chen</title>
+  <desc id="desc">A monochrome terminal-inspired mark.</desc>
+  <rect width="128" height="128" rx="16" fill="#fbfbf8"/>
+  <rect x="18" y="24" width="92" height="80" rx="8" fill="none" stroke="#111" stroke-width="4"/>
+  <path d="M34 48l16 16-16 16" fill="none" stroke="#111" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 82h32" fill="none" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+  <path d="M26 34h76" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round"/>
+</svg>

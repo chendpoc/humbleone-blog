@@ -1,0 +1,36 @@
+{
+  "name": "humbleone-blog",
+  "version": "1.0.0",
+  "description": "HumbleOne Chen personal learning blog built with VitePress.",
+  "author": "Facefall",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.5",
+  "private": false,
+  "templateSource": "https://github.com/clark-cui/vitepress-blog-zaun",
+  "engines": {
+    "node": ">=24.14.0"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "serve": "vitepress preview",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "@shikijs/vitepress-twoslash": "^3.23.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^25.4.0",
+    "dayjs": "^1.11.19",
+    "fast-glob": "^3.3.3",
+    "feed": "^4.2.2",
+    "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.1",
+    "markdown-it-mathjax3": "^4.3.2",
+    "mermaid": "^11.12.2",
+    "shiki": "^3.23.0",
+    "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.30"
+  }
+}
