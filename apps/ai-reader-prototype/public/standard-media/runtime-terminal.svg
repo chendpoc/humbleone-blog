@@ -1,0 +1,32 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="420" fill="#080a0c"/>
+  <defs>
+    <linearGradient id="line" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0a500" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#f0a500" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#f0a500" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <g opacity="0.18" stroke="#ffffff">
+    <path d="M0 84H1200"/>
+    <path d="M0 168H1200"/>
+    <path d="M0 252H1200"/>
+    <path d="M0 336H1200"/>
+  </g>
+  <g font-family="JetBrains Mono, Consolas, monospace" font-size="22" fill="#8b8680">
+    <text x="72" y="88">runtime.control_plane.status</text>
+    <text x="72" y="142">adapter.github.changelog.scan</text>
+    <text x="72" y="196">normalizer.feed_item.commit</text>
+    <text x="72" y="250">compiler.daily_brief.select</text>
+    <text x="72" y="304">reader.source_proof.ready</text>
+  </g>
+  <g stroke="url(#line)" stroke-width="3">
+    <path d="M72 360C178 314 238 318 317 270C396 222 462 100 551 135C640 170 666 296 766 246C866 196 902 105 1028 78"/>
+  </g>
+  <g fill="#f0a500">
+    <circle cx="317" cy="270" r="6"/>
+    <circle cx="551" cy="135" r="6"/>
+    <circle cx="766" cy="246" r="6"/>
+    <circle cx="1028" cy="78" r="6"/>
+  </g>
+</svg>
