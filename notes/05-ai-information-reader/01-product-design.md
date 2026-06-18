@@ -857,6 +857,15 @@ notes/
 
 RSSHub 适合作为 adapter 补缺，不适合作为唯一来源层。
 
+v0.1 的实际实现路线：
+
+- 在 Reader App 服务端直接使用 `rsshub` npm package：`init()` 一次初始化，`request('/route')` 按 route 拉取数据。
+- 不优先依赖公共 `rsshub.app` 实例；公共实例可作为调试参考，但不作为产品稳定入口。
+- Source Registry 继续作为 source-of-truth，记录 source family、route、优先级、内容类型和为什么订阅。
+- Feed Hub API 负责把 RSSHub 返回的 `Data.item[]` 归一化成内部 `FeedItem`，前端只消费统一的 `/api/feed-hub` JSON。
+- 第一批 tracer route：`/anthropic/engineering`、`/claude/code/changelog`、`/cursor/changelog`。
+- 第一版仍然不做新增订阅源 UI；route 由项目配置手动维护，等订阅源数量和维护痛点真实出现后，再评估 Folo Discover 式的 URL 自动识别和导入。
+
 自建 RSSHub 的价值：
 
 - 可配置 X / Bilibili / 其他平台所需 token 或 cookie
@@ -869,6 +878,7 @@ RSSHub 适合作为 adapter 补缺，不适合作为唯一来源层。
 - 强反爬平台可靠性较低
 - 需要状态监控
 - 对有官方 feed 的源不应优先使用 RSSHub
+- `rsshub` package 采用 AGPL-3.0，需要在公开部署或二次分发前复核许可证影响
 
 ## 15. 错误处理与可靠性
 
