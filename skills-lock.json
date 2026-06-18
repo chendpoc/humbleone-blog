@@ -193,6 +193,12 @@
       "skillPath": "skills/deprecated/ubiquitous-language/SKILL.md",
       "computedHash": "4828c4957014e7d9c1fd62d65e92264d6d46808089953e14d1bbba5a92dfff4d"
     },
+    "web-typography": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "web-typography/SKILL.md",
+      "computedHash": "8382d466ccf8ebbc99ec897d93c43013e476861495c1996c99ea13f2d5f57eb4"
+    },
     "write-a-skill": {
       "source": "mattpocock/skills",
       "sourceType": "github",
