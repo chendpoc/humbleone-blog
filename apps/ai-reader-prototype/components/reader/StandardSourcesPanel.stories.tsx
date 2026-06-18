@@ -1,11 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 
-import { dailyBrief } from '../../lib/prototype-data'
+import { StandardReaderStoryFrame } from './StandardReaderStoryFrame'
 import { StandardSourcesPanel } from './StandardSourcesPanel'
-import { buildSources } from './standardReaderModel'
-
-const sources = buildSources(dailyBrief)
-const activeSources = sources.filter((source) => source.active).length
+import { storyActiveSources, storySources } from './readerStoryFixtures'
 
 const meta = {
   title: 'AI Reader/Standard Sources Panel',
@@ -17,12 +14,19 @@ const meta = {
     },
   },
   args: {
-    sources,
-    activeSources,
-    selectedSourceId: sources[0].feedSourceId,
+    sources: storySources,
+    activeSources: storyActiveSources,
+    selectedSourceId: storySources[0].feedSourceId,
     onCollapse: () => undefined,
     onSelectSource: () => undefined,
   },
+  decorators: [
+    (Story) => (
+      <StandardReaderStoryFrame width={280}>
+        <Story />
+      </StandardReaderStoryFrame>
+    ),
+  ],
 } satisfies Meta<typeof StandardSourcesPanel>
 
 export default meta
@@ -30,3 +34,15 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const SelectedSource: Story = {}
+
+export const FeedHubOverview: Story = {
+  args: {
+    selectedSourceId: null,
+  },
+}
+
+export const FailedSourceRegistry: Story = {
+  args: {
+    selectedSourceId: 'source-old-rsshub-route',
+  },
+}

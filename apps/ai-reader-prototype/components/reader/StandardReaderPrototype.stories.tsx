@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite'
 
-import { dailyBrief } from '../../lib/prototype-data'
 import { StandardReaderPrototype } from './StandardReaderPrototype'
+import { storyBrief } from './readerStoryFixtures'
 
 const meta = {
   title: 'AI Reader/Standard Reader',
@@ -20,19 +20,39 @@ type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
   args: {
-    brief: dailyBrief,
+    brief: storyBrief,
   },
 }
 
 export const InteractionSandbox: Story = {
   args: {
-    brief: dailyBrief,
+    brief: storyBrief,
   },
   parameters: {
     docs: {
       description: {
         story:
           'Standard reader with draggable left and right separators, source filtering, category tabs, article selection, search, and feedback buttons.',
+      },
+    },
+  },
+}
+
+export const FilteredDeepLink: Story = {
+  args: {
+    brief: storyBrief,
+    initialState: {
+      selectedCategory: 'AI Labs',
+      selectedArticleId: 'item-anthropic-engineering-claude-code-agent-interface',
+      selectedSourceId: 'source-anthropic-engineering',
+      searchQuery: 'claude',
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Reader booted from a deep-link style state: search query, category, source, and selected article are all preselected.',
       },
     },
   },
