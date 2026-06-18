@@ -92,6 +92,7 @@ export function StandardTopBar({
           className="standard-search-trigger"
           aria-label={t('topbar.searchOpenAria')}
           aria-expanded={searchOpen}
+          data-empty={searchQuery ? undefined : 'true'}
           onClick={() => setSearchOpen(true)}
         >
           <MagnifyingGlassIcon />
