@@ -32,7 +32,7 @@ export const InteractionSandbox: Story = {
     docs: {
       description: {
         story:
-          'Standard reader with draggable left and right separators, source filtering, category tabs, article selection, search, and feedback buttons.',
+          'Standard reader with draggable left and right separators, source filtering, feed controls, article selection, content search, and feedback buttons.',
       },
     },
   },
@@ -42,7 +42,6 @@ export const FilteredDeepLink: Story = {
   args: {
     brief: storyBrief,
     initialState: {
-      selectedCategory: 'AI Labs',
       selectedArticleId: 'item-anthropic-engineering-claude-code-agent-interface',
       selectedSourceId: 'source-anthropic-engineering',
       searchQuery: 'claude',
@@ -52,7 +51,7 @@ export const FilteredDeepLink: Story = {
     docs: {
       description: {
         story:
-          'Reader booted from a deep-link style state: search query, category, source, and selected article are all preselected.',
+          'Reader booted from a deep-link style state: search query, source, and selected article are preselected.',
       },
     },
   },

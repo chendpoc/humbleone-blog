@@ -78,10 +78,8 @@ function ResizableLayoutStory() {
           <StandardFeedPanel
             articles={visibleArticles}
             selectedArticleId={selectedArticle.id}
-            selectedCategory="All"
             selectedSourceId={selectedSourceId}
             onSelectArticle={setSelectedArticleId}
-            onSelectCategory={() => undefined}
             onClearSource={() => setSelectedSourceId(null)}
           />
         }

@@ -16,11 +16,13 @@ const meta = {
   args: {
     articles: storyArticles,
     selectedArticleId: storyArticles[0].id,
-    selectedCategory: 'All',
     selectedSourceId: null,
+    unreadCount: storyArticles.length,
     onSelectArticle: () => undefined,
-    onSelectCategory: () => undefined,
     onClearSource: () => undefined,
+    onMarkAllRead: () => undefined,
+    onRefreshFeed: () => undefined,
+    onToggleUnreadOnly: () => undefined,
   },
   decorators: [
     (Story) => (
@@ -45,12 +47,23 @@ export const SourceFiltered: Story = {
 
 export const SavedWithActionNotice: Story = {
   args: {
+    readArticleIds: new Set([storyArticles[2].id]),
     savedArticleIds: new Set([storyArticles[0].id, storyArticles[4].id]),
+    favoritedArticleIds: new Set([storyArticles[1].id]),
     actionNotice: {
       articleId: storyArticles[0].id,
-      label: 'Saved',
+      label: 'Saved for later',
       tone: 'positive',
     },
+  },
+}
+
+export const UnreadOnly: Story = {
+  args: {
+    showUnreadOnly: true,
+    unreadCount: 3,
+    readArticleIds: new Set([storyArticles[0].id, storyArticles[1].id, storyArticles[2].id]),
+    feedNotice: 'Marked 3 items as read',
   },
 }
 
@@ -58,6 +71,6 @@ export const EmptyState: Story = {
   args: {
     articles: [],
     selectedSourceId: 'source-anthropic-engineering',
-    selectedCategory: 'Research',
+    unreadCount: 0,
   },
 }
