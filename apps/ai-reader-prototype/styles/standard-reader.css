@@ -561,6 +561,7 @@
 
 .standard-sources-panel-actions > button,
 .standard-source-filter-trigger {
+  padding: 0;
   display: grid;
   place-items: center;
   width: 20px;
