@@ -18,7 +18,21 @@ export type StandardSource = SourceDeskItem & {
   registry?: SourceRegistryRecord
 }
 
+export type SourceCollection = {
+  id: string
+  name: string
+  sourceIds: string[]
+  systemCategory?: string
+}
+
+export type SourceCollectionState = {
+  collections: SourceCollection[]
+  sourceAliases: Record<string, string>
+}
+
 export type StandardFeedback = 'helpful' | 'not-helpful' | null
+
+export type StandardLibraryFilter = 'bookmarks' | 'favorites'
 
 export type StandardActionNotice = {
   articleId: string

@@ -15,7 +15,7 @@ import {
   StarIcon,
 } from './ReaderIcons'
 import { activateFromKeyboard, joinClasses } from '../../utils/readerUtils'
-import type { StandardActionNotice, StandardArticle } from '../../types/reader'
+import type { StandardActionNotice, StandardArticle, StandardLibraryFilter } from '../../types/reader'
 import { useGsapStaggerReveal } from '../../hooks/useGsapMotion'
 
 type StandardFeedPanelProps = {
@@ -30,8 +30,10 @@ type StandardFeedPanelProps = {
   showUnreadOnly?: boolean
   actionNotice?: StandardActionNotice
   feedNotice?: string | null
+  libraryFilter?: StandardLibraryFilter | null
   onSelectArticle: (articleId: string) => void
   onClearSource: () => void
+  onClearLibraryFilter?: () => void
   onRestoreArticlePanel?: () => void
   onFavoriteArticle?: (articleId: string) => void
   onMarkAllRead?: () => void
@@ -57,8 +59,10 @@ export function StandardFeedPanel({
   showUnreadOnly = false,
   actionNotice = null,
   feedNotice = null,
+  libraryFilter = null,
   onSelectArticle,
   onClearSource,
+  onClearLibraryFilter,
   onRestoreArticlePanel,
   onFavoriteArticle,
   onMarkAllRead,
@@ -97,7 +101,13 @@ export function StandardFeedPanel({
     <section className="standard-feed-panel" aria-label={t('feed.aria')}>
       <header className="standard-feed-toolbar">
         <div className="standard-feed-toolbar-status">
-          <span>{showUnreadOnly ? t('feed.unreadList') : t('feed.list')}</span>
+          <span>
+            {libraryFilter
+              ? t(`feed.library.${libraryFilter}`)
+              : showUnreadOnly
+                ? t('feed.unreadList')
+                : t('feed.list')}
+          </span>
           <small>{t('feed.shownUnread', { shown: articles.length, unread: unreadCount })}</small>
           {feedNotice ? <strong aria-live="polite">{feedNotice}</strong> : null}
         </div>
@@ -126,6 +136,14 @@ export function StandardFeedPanel({
         <div className="standard-filter-strip">
           <span>{t('feed.sourceFilterActive')}</span>
           <button type="button" onClick={onClearSource}>
+            {t('common:actions.clear')}
+          </button>
+        </div>
+      ) : null}
+      {libraryFilter ? (
+        <div className="standard-filter-strip is-library-filter">
+          <span>{t(`feed.libraryActive.${libraryFilter}`)}</span>
+          <button type="button" onClick={onClearLibraryFilter}>
             {t('common:actions.clear')}
           </button>
         </div>
@@ -164,7 +182,11 @@ export function StandardFeedPanel({
                 aria-current={selectedArticleId === article.id ? 'true' : undefined}
                 onClick={() => onSelectArticle(article.id)}
                 onKeyDown={(event) => activateFromKeyboard(event, () => onSelectArticle(article.id))}
-              >
+                >
+                <div className="standard-feed-state-marks" aria-hidden="true">
+                  {isSaved ? <span className="mark-bookmark" /> : null}
+                  {isFavorited ? <span className="mark-favorite">★</span> : null}
+                </div>
                 {article.importance === 'breaking' ? (
                   <span className="standard-breaking">● {t('feed.breaking')}</span>
                 ) : null}

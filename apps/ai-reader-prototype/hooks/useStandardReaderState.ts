@@ -8,6 +8,7 @@ import { readStandardArticleState, writeStandardArticleState } from '../services
 import type {
   StandardActionNotice,
   StandardFeedback,
+  StandardLibraryFilter,
   StandardReaderInitialState,
 } from '../types/reader'
 import { filterStandardArticles } from '../utils/readerFiltering'
@@ -48,6 +49,7 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
   )
   const [articleStateHydrated, setArticleStateHydrated] = useState(false)
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
+  const [libraryFilter, setLibraryFilter] = useState<StandardLibraryFilter | null>(null)
   const [actionNotice, setActionNotice] = useState<StandardActionNotice>(null)
   const [feedNotice, setFeedNotice] = useState<string | null>(null)
   const [copiedAnalysisArticleId, setCopiedAnalysisArticleId] = useState<string | null>(null)
@@ -66,15 +68,32 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
         searchQuery: deferredSearchQuery,
         selectedSourceId,
       })
+      const libraryFilteredArticles =
+        libraryFilter === 'bookmarks'
+          ? nextArticles.filter((article) => savedArticleIds.has(article.id))
+          : libraryFilter === 'favorites'
+            ? nextArticles.filter((article) => favoritedArticleIds.has(article.id))
+            : nextArticles
 
-      return showUnreadOnly ? nextArticles.filter((article) => !readArticleIds.has(article.id)) : nextArticles
+      return showUnreadOnly
+        ? libraryFilteredArticles.filter((article) => !readArticleIds.has(article.id))
+        : libraryFilteredArticles
     },
-    [articles, deferredSearchQuery, readArticleIds, selectedSourceId, showUnreadOnly],
+    [
+      articles,
+      deferredSearchQuery,
+      favoritedArticleIds,
+      libraryFilter,
+      readArticleIds,
+      savedArticleIds,
+      selectedSourceId,
+      showUnreadOnly,
+    ],
   )
   const selectedArticle =
     filteredArticles.find((article) => article.id === selectedArticleId) ??
     getSelectedArticle(articles, selectedArticleId)
-  const hasActiveFilters = Boolean(searchQuery || selectedSourceId || showUnreadOnly)
+  const hasActiveFilters = Boolean(searchQuery || selectedSourceId || showUnreadOnly || libraryFilter)
   const relatedArticles = useMemo(() => getRelatedStandardArticles(articles, selectedArticle), [articles, selectedArticle])
   const unreadCount = articles.reduce((count, article) => count + (readArticleIds.has(article.id) ? 0 : 1), 0)
 
@@ -178,11 +197,21 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
   ])
 
   function selectSource(sourceId: string) {
+    setLibraryFilter(null)
     setSelectedSourceId((current) => (current === sourceId ? null : sourceId))
   }
 
   function clearSourceFilter() {
     setSelectedSourceId(null)
+  }
+
+  function selectLibraryFilter(filter: StandardLibraryFilter) {
+    setSelectedSourceId(null)
+    setLibraryFilter((current) => (current === filter ? null : filter))
+  }
+
+  function clearLibraryFilter() {
+    setLibraryFilter(null)
   }
 
   function selectArticle(articleId: string) {
@@ -216,6 +245,7 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
     setSearchQuery('')
     setSelectedSourceId(null)
     setShowUnreadOnly(false)
+    setLibraryFilter(null)
   }
 
   function refreshFeed() {
@@ -330,6 +360,7 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
     readArticleIds,
     savedArticleIds,
     favoritedArticleIds,
+    libraryFilter,
     showUnreadOnly,
     actionNotice,
     feedNotice,
@@ -339,6 +370,7 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
     hasActiveFilters,
     actions: {
       clearSourceFilter,
+      clearLibraryFilter,
       clearReaderFilters,
       copyAnalysis,
       closeArticlePanel,
@@ -347,6 +379,7 @@ export function useStandardReaderState(brief: DailyBrief, initialState?: Standar
       refreshFeed,
       shareArticle,
       selectArticle,
+      selectLibraryFilter,
       selectNextArticle,
       selectSource,
       setFeedback,

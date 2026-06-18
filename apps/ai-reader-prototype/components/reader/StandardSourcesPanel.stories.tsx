@@ -35,13 +35,13 @@ type Story = StoryObj<typeof meta>
 
 export const SelectedSource: Story = {}
 
-export const FeedHubOverview: Story = {
+export const QuickAccessOverview: Story = {
   args: {
     selectedSourceId: null,
   },
 }
 
-export const FailedSourceRegistry: Story = {
+export const FailedSourceProfile: Story = {
   args: {
     selectedSourceId: 'source-old-rsshub-route',
   },

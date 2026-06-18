@@ -21,6 +21,14 @@
     "aria": "Today feed",
     "list": "Feed list",
     "unreadList": "Unread feed",
+    "library": {
+      "bookmarks": "Bookmarks",
+      "favorites": "Favorites"
+    },
+    "libraryActive": {
+      "bookmarks": "Viewing bookmarks",
+      "favorites": "Viewing favorites"
+    },
     "shownUnread": "{{shown}} shown · {{unread}} unread",
     "actionsAria": "Feed actions",
     "refresh": "Refresh",
@@ -111,34 +119,57 @@
   },
   "group": {
     "expandAria": "Expand {{category}} sources",
-    "collapseAria": "Collapse {{category}} sources"
+    "collapseAria": "Collapse {{category}} sources",
+    "empty": "No sources"
+  },
+  "sourceManagement": {
+    "groupMenuAria": "Open group actions",
+    "sourceMenuAria": "Open source actions",
+    "newGroup": "New group",
+    "groupsToolbarAria": "Source group actions",
+    "groupsTitle": "Groups",
+    "groupsCount": "{{count}}",
+    "createGroupAria": "Create source group",
+    "renameGroup": "Rename group",
+    "addSources": "Add sources",
+    "deleteGroup": "Delete group",
+    "renameSource": "Rename source",
+    "removeFromGroup": "Remove from this group",
+    "createGroupTitle": "New source group",
+    "createGroupDescription": "Groups are your reading view. They do not change how sources are fetched.",
+    "createGroupSubmit": "Create group",
+    "renameGroupTitle": "Rename group",
+    "renameGroupDescription": "Use a name that matches how you scan this source set.",
+    "renameSourceTitle": "Rename source",
+    "renameSourceDescription": "This only changes the local display name, not the source URL or fetch settings.",
+    "groupNameLabel": "Group name",
+    "sourceNameLabel": "Source name",
+    "groupNamePlaceholder": "For example: Agent tools",
+    "sourceNamePlaceholder": "For example: Claude Code updates",
+    "addSourcesTitle": "Add sources to {{name}}",
+    "addSourcesDescription": "A source can appear in multiple groups.",
+    "searchSources": "Search sources",
+    "searchSourcesPlaceholder": "Type a source, topic, or adapter...",
+    "sourcePickerAria": "Available sources",
+    "noAvailableSources": "This group already contains every matching source.",
+    "selectedSources": "{{count}} selected",
+    "addSelected": "Add selected",
+    "deleteGroupTitle": "Delete {{name}}?",
+    "deleteGroupDescription": "{{count}} sources in this group will return to the default group. Sources are not deleted.",
+    "deleteConfirm": "Delete group",
+    "closeDialogAria": "Close dialog",
+    "cancel": "Cancel",
+    "save": "Save"
   },
   "inspector": {
-    "overviewAria": "Feed hub overview",
-    "feedHub": "Feed Hub",
+    "overviewAria": "Quick access",
+    "quickAccess": "Quick Access",
+    "quickAccessAria": "Reading destinations",
+    "bookmarks": "Bookmarks",
+    "favorites": "Favorites",
     "active": "Active",
     "failed": "Failed",
-    "overviewHint": "Official feeds first; RSSHub and manual capture stay visible as weaker adapters.",
-    "registryAria": "{{name}} registry",
-    "registry": "Registry",
-    "method": "Method",
-    "cadence": "Cadence",
-    "adapter": "Adapter",
-    "language": "Language",
-    "openSource": "Open source",
-    "noRegistry": "No registry record yet."
-  },
-  "fetchMethod": {
-    "official_rss": "official RSS",
-    "official_api": "official API",
-    "rsshub": "RSSHub",
-    "custom_scrape": "custom scrape",
-    "manual": "manual"
-  },
-  "registryLanguage": {
-    "zh-CN": "Chinese",
-    "en": "English",
-    "mixed": "Mixed"
+    "overviewHint": "Saved items are for later reading; favorites are long-term references."
   },
   "categories": {
     "model_lab": "AI Labs",

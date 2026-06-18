@@ -7,6 +7,7 @@ export function useSourcePanelPreferences(groupNames: string[]) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [showActiveOnly, setShowActiveOnly] = useState(false)
   const [preferencesHydrated, setPreferencesHydrated] = useState(false)
+  const groupSignature = groupNames.join('\u0000')
 
   useEffect(() => {
     const preferences = readSourcePanelPreferences(groupNames)
@@ -14,7 +15,7 @@ export function useSourcePanelPreferences(groupNames: string[]) {
     setCollapsedGroups(new Set(preferences.collapsedGroups))
     setShowActiveOnly(preferences.activeOnly)
     setPreferencesHydrated(true)
-  }, [groupNames])
+  }, [groupSignature])
 
   useEffect(() => {
     if (!preferencesHydrated) {

@@ -70,8 +70,14 @@ export function StandardReaderPrototype({ brief, initialState, showThemeSwitch =
               sources={readerState.sources}
               activeSources={readerState.activeSources}
               collapsing={controls.sourcesCollapsing}
+              libraryCounts={{
+                bookmarks: readerState.savedArticleIds.size,
+                favorites: readerState.favoritedArticleIds.size,
+              }}
+              libraryFilter={readerState.libraryFilter}
               selectedSourceId={readerState.selectedSourceId}
               onCollapse={controls.collapseSourcesPanel}
+              onSelectLibraryFilter={readerState.actions.selectLibraryFilter}
               onSelectSource={readerState.actions.selectSource}
             />
           )
@@ -89,7 +95,9 @@ export function StandardReaderPrototype({ brief, initialState, showThemeSwitch =
             showUnreadOnly={readerState.showUnreadOnly}
             actionNotice={readerState.actionNotice}
             feedNotice={readerState.feedNotice}
+            libraryFilter={readerState.libraryFilter}
             onSelectArticle={readerState.actions.selectArticle}
+            onClearLibraryFilter={readerState.actions.clearLibraryFilter}
             onClearSource={readerState.actions.clearSourceFilter}
             onRestoreArticlePanel={readerState.actions.openArticlePanel}
             onFavoriteArticle={readerState.actions.toggleFavoriteArticle}

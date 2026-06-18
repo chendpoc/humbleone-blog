@@ -1,98 +1,67 @@
 'use client'
 
 import { useTranslation } from 'react-i18next'
-import type { StandardSource } from '../../types/reader'
+import type { StandardLibraryFilter, StandardSource } from '../../types/reader'
+import { BookmarkIcon, StarIcon } from './ReaderIcons'
 
 type StandardSourceInspectorProps = {
   sources: StandardSource[]
-  selectedSource?: StandardSource
+  libraryCounts?: Record<StandardLibraryFilter, number>
+  libraryFilter?: StandardLibraryFilter | null
+  onSelectLibraryFilter?: (filter: StandardLibraryFilter) => void
 }
-
-type FetchMethod = 'official_rss' | 'official_api' | 'rsshub' | 'custom_scrape' | 'manual'
 
 export function StandardSourceInspector({
   sources,
-  selectedSource,
+  libraryCounts = { bookmarks: 0, favorites: 0 },
+  libraryFilter = null,
+  onSelectLibraryFilter,
 }: StandardSourceInspectorProps) {
   const { t } = useTranslation('reader')
-
-  if (!selectedSource) {
-    const activeCount = sources.filter((source) => source.active).length
-    const failedCount = sources.filter((source) => source.health === 'failed').length
-
-    return (
-      <section className="standard-source-inspector" aria-label={t('inspector.overviewAria')}>
-        <header>
-          <span>{t('inspector.feedHub')}</span>
-          <strong>
-            {activeCount}/{sources.length}
-          </strong>
-        </header>
-        <div className="standard-source-stat-grid">
-          <span>
-            {t('inspector.active')}
-            <b>{activeCount}</b>
-          </span>
-          <span>
-            {t('inspector.failed')}
-            <b>{failedCount}</b>
-          </span>
-        </div>
-        <p>{t('inspector.overviewHint')}</p>
-      </section>
-    )
-  }
-
-  const registry = selectedSource.registry
+  const activeCount = sources.filter((source) => source.active).length
+  const failedCount = sources.filter((source) => source.health === 'failed').length
 
   return (
-    <section
-      className="standard-source-inspector"
-      aria-label={t('inspector.registryAria', { name: selectedSource.label })}
-    >
+    <section className="standard-source-inspector" aria-label={t('inspector.overviewAria')}>
       <header>
-        <span>{t('inspector.registry')}</span>
-        <strong>{registry?.priority ?? 'medium'}</strong>
+        <span>{t('inspector.quickAccess')}</span>
+        <strong>
+          {activeCount}/{sources.length}
+        </strong>
       </header>
-      <h3>{selectedSource.label}</h3>
-      <div className="standard-source-health-row">
-        <span className={`health-${selectedSource.health}`}>{selectedSource.health}</span>
-        <span>{registry?.evidenceLevel ?? selectedSource.evidenceLevel ?? 'manual'}</span>
+      <div className="standard-quick-access-list" aria-label={t('inspector.quickAccessAria')}>
+        <button
+          type="button"
+          className={libraryFilter === 'bookmarks' ? 'is-active' : undefined}
+          aria-pressed={libraryFilter === 'bookmarks'}
+          onClick={() => onSelectLibraryFilter?.('bookmarks')}
+        >
+          <BookmarkIcon />
+          <span>{t('inspector.bookmarks')}</span>
+          <b>{libraryCounts.bookmarks}</b>
+        </button>
+        <button
+          type="button"
+          className={libraryFilter === 'favorites' ? 'is-active' : undefined}
+          aria-pressed={libraryFilter === 'favorites'}
+          onClick={() => onSelectLibraryFilter?.('favorites')}
+        >
+          <StarIcon />
+          <span>{t('inspector.favorites')}</span>
+          <b>{libraryCounts.favorites}</b>
+        </button>
       </div>
-      {registry ? (
-        <>
-          <div className="standard-source-registry-grid">
-            <span>
-              {t('inspector.method')}
-              <b>{t(`fetchMethod.${registry.fetchMethod as FetchMethod}`)}</b>
-            </span>
-            <span>
-              {t('inspector.cadence')}
-              <b>{registry.updateFrequency}</b>
-            </span>
-            <span>
-              {t('inspector.adapter')}
-              <b>{registry.adapter}</b>
-            </span>
-            <span>
-              {t('inspector.language')}
-              <b>
-                {t(`registryLanguage.${registry.language}`, { defaultValue: registry.language })}
-              </b>
-            </span>
-          </div>
-          <div className="standard-source-tags">
-            {registry.topicTags.slice(0, 3).map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-          <p>{registry.whyFollow}</p>
-          <small>{registry.riskNotes}</small>
-          <a href={registry.officialUrl}>{t('inspector.openSource')}</a>
-        </>
-      ) : (
-        <p>{t('inspector.noRegistry')}</p>
-      )}
+      <div className="standard-source-stat-grid">
+        <span>
+          {t('inspector.active')}
+          <b>{activeCount}</b>
+        </span>
+        <span>
+          {t('inspector.failed')}
+          <b>{failedCount}</b>
+        </span>
+      </div>
+      <p>{t('inspector.overviewHint')}</p>
     </section>
   )
 }
