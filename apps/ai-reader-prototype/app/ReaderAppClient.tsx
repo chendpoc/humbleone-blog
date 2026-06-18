@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { TodayPrototype, type PrototypeVariant } from '../components/TodayPrototype'
 import { StandardReaderPrototype } from '../components/reader/StandardReaderPrototype'
+import { useFeedHubBrief } from '../hooks/api/useFeedHubBrief'
 import { dailyBrief } from '../lib/prototype-data'
 
 type ReaderTheme = 'standard' | 'source-desk'
@@ -39,7 +40,9 @@ function ReaderAppClientFallback() {
 
 export function ReaderAppClient() {
   const [mounted, setMounted] = useState(false)
+  const feedHubBrief = useFeedHubBrief()
   const searchParams = useSearchParams()
+  const brief = feedHubBrief.data?.brief ?? dailyBrief
 
   useEffect(() => {
     setMounted(true)
@@ -53,8 +56,8 @@ export function ReaderAppClient() {
   const theme = normalizeTheme(searchParams.get('theme'))
 
   if (theme === 'source-desk') {
-    return <TodayPrototype brief={dailyBrief} variant={variant} />
+    return <TodayPrototype brief={brief} variant={variant} />
   }
 
-  return <StandardReaderPrototype brief={dailyBrief} showThemeSwitch />
+  return <StandardReaderPrototype brief={brief} showThemeSwitch />
 }

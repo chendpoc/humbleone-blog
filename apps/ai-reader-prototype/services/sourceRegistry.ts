@@ -14,6 +14,7 @@ export type SourceRegistryRecord = {
   fetchMethod: FetchMethod
   contentType: SourceContentType
   adapter: string
+  rsshubRoute?: string
   updateFrequency: string
   evidenceLevel: EvidenceLevel
   whyFollow: string
@@ -32,10 +33,28 @@ export const sourceRegistry: Record<string, SourceRegistryRecord> = {
     fetchMethod: 'official_rss',
     contentType: 'article',
     adapter: 'anthropic.engineering.feed',
+    rsshubRoute: '/anthropic/engineering',
     updateFrequency: 'daily check',
     evidenceLevel: 'official',
     whyFollow: 'Official engineering updates often change coding-agent workflow assumptions.',
     riskNotes: 'Product posts can be broad; keep engineering evidence separate from launch copy.',
+  },
+  'source-claude-code-changelog': {
+    sourceId: 'source-claude-code-changelog',
+    displayName: 'Claude Code Changelog',
+    sourceFamily: 'model_lab',
+    topicTags: ['claude-code', 'changelog', 'coding-agent'],
+    priority: 'critical',
+    language: 'en',
+    officialUrl: 'https://docs.anthropic.com/en/docs/claude-code/changelog',
+    fetchMethod: 'rsshub',
+    contentType: 'article',
+    adapter: 'rsshub.claude.code.changelog',
+    rsshubRoute: '/claude/code/changelog',
+    updateFrequency: 'daily check',
+    evidenceLevel: 'official',
+    whyFollow: 'Claude Code changelog is a direct signal for coding-agent workflow changes.',
+    riskNotes: 'Changelog items can be small; keep only workflow-impacting updates in daily picks.',
   },
   'source-codewhale-changelog': {
     sourceId: 'source-codewhale-changelog',
@@ -84,6 +103,23 @@ export const sourceRegistry: Record<string, SourceRegistryRecord> = {
     evidenceLevel: 'community',
     whyFollow: 'Discussion threads surface practical friction before it appears in official docs.',
     riskNotes: 'Community signal is noisy; use it for questions and patterns, not final facts.',
+  },
+  'source-cursor-changelog': {
+    sourceId: 'source-cursor-changelog',
+    displayName: 'Cursor Changelog',
+    sourceFamily: 'model_lab',
+    topicTags: ['cursor', 'coding-agent', 'changelog'],
+    priority: 'high',
+    language: 'en',
+    officialUrl: 'https://cursor.com/changelog',
+    fetchMethod: 'rsshub',
+    contentType: 'article',
+    adapter: 'rsshub.cursor.changelog',
+    rsshubRoute: '/cursor/changelog',
+    updateFrequency: 'daily check',
+    evidenceLevel: 'official',
+    whyFollow: 'Cursor release notes show how agentic coding UX is evolving in production tools.',
+    riskNotes: 'Product changelog language can be broad; prefer concrete workflow and editor behavior changes.',
   },
   'source-openai-blog': {
     sourceId: 'source-openai-blog',
