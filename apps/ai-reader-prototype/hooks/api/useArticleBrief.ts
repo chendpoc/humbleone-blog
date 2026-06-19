@@ -1,18 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import useSWRMutation from 'swr/mutation'
 import type { StandardArticle } from '../../types/reader'
 import {
+  type ArticleBriefRequest,
   generateArticleBriefRequest,
   type ArticleBriefResponse,
 } from '../../services/api/articleBriefApi'
 import { isApiCanceledError, normalizeApiError, type ApiError } from '../../services/api/request'
-import { waitForMinimumDuration } from '../../utils/asyncTiming'
+import { useMinimumVisibleLoading } from '../useMinimumVisibleLoading'
 
-type ArticleBriefState = {
-  data: ArticleBriefResponse | null
-  error: ApiError | null
-  status: 'idle' | 'loading' | 'success' | 'error'
+type ArticleBriefMutationArg = {
+  payload: ArticleBriefRequest
+  signal: AbortSignal
 }
 
 const minimumLoadingMs = 900
@@ -28,12 +29,32 @@ export function useArticleBrief(article: StandardArticle, enabled: boolean) {
     ].join('\u001f'),
     [article.id, article.language, article.reader.body, article.title, article.url],
   )
-  const [state, setState] = useState<ArticleBriefState>({
-    data: null,
-    error: null,
-    status: 'idle',
-  })
+  const mutationKey = useMemo(() => `/api/article-brief:${requestKey}`, [requestKey])
   const completedRequestKeyRef = useRef<string | null>(null)
+  const {
+    data = null,
+    error: rawError,
+    isMutating,
+    trigger,
+  } = useSWRMutation<ArticleBriefResponse, ApiError, string, ArticleBriefMutationArg>(
+    mutationKey,
+    (_key, { arg }) => generateArticleBriefRequest(arg.payload, { signal: arg.signal }),
+    {
+      throwOnError: false,
+    },
+  )
+  const isMinimumLoadingVisible = useMinimumVisibleLoading(isMutating, {
+    minDurationMs: minimumLoadingMs,
+    resetKey: requestKey,
+  })
+  const error = rawError && !isApiCanceledError(rawError) ? normalizeApiError(rawError) : null
+  const status = isMinimumLoadingVisible
+    ? 'loading'
+    : error
+      ? 'error'
+      : data
+        ? 'success'
+        : 'idle'
 
   useEffect(() => {
     if (!enabled) {
@@ -45,63 +66,40 @@ export function useArticleBrief(article: StandardArticle, enabled: boolean) {
     }
 
     const controller = new AbortController()
-    const startedAt = Date.now()
 
-    setState({
-      data: null,
-      error: null,
-      status: 'loading',
-    })
-
-    void generateArticleBriefRequest({
-      articleId: article.id,
-      body: article.reader.body,
-      sourceLanguage: article.language,
-      targetLanguage: 'zh-CN',
-      title: article.title,
-      url: article.url,
-    }, {
+    void trigger({
+      payload: {
+        articleId: article.id,
+        body: article.reader.body,
+        sourceLanguage: article.language,
+        targetLanguage: 'zh-CN',
+        title: article.title,
+        url: article.url,
+      },
       signal: controller.signal,
-    }).then(async (data) => {
-      await waitForMinimumDuration(startedAt, minimumLoadingMs, controller.signal)
-
-      if (controller.signal.aborted) {
+    }, {
+      throwOnError: false,
+    }).then((data) => {
+      if (!data || controller.signal.aborted) {
         return
       }
 
       completedRequestKeyRef.current = requestKey
-      setState({
-        data,
-        error: null,
-        status: 'success',
-      })
-    }).catch(async (error) => {
-      if (controller.signal.aborted || isApiCanceledError(error)) {
-        return
-      }
-
-      await waitForMinimumDuration(startedAt, minimumLoadingMs, controller.signal)
-
-      if (controller.signal.aborted) {
-        return
-      }
-
-      setState({
-        data: null,
-        error: normalizeApiError(error),
-        status: 'error',
-      })
+    }).catch(() => {
+      // SWR owns the mutation error state; canceled requests are normalized below.
     })
 
     return () => {
       controller.abort()
     }
-  }, [article, enabled, requestKey])
+  }, [article, enabled, requestKey, trigger])
 
   return {
-    ...state,
-    isError: state.status === 'error',
-    isLoading: state.status === 'loading',
-    isSuccess: state.status === 'success',
+    data,
+    error,
+    status,
+    isError: status === 'error',
+    isLoading: isMinimumLoadingVisible,
+    isSuccess: status === 'success',
   }
 }

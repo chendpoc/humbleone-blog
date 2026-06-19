@@ -1,19 +1,20 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import useSWRMutation from 'swr/mutation'
 import type { StandardArticle } from '../../types/reader'
 import {
+  type ArticleTranslationRequest,
   translateArticleRequest,
   type ArticleTranslationLanguage,
   type ArticleTranslationResponse,
 } from '../../services/api/articleTranslationApi'
 import { isApiCanceledError, normalizeApiError, type ApiError } from '../../services/api/request'
-import { waitForMinimumDuration } from '../../utils/asyncTiming'
+import { useMinimumVisibleLoading } from '../useMinimumVisibleLoading'
 
-type ArticleTranslationState = {
-  data: ArticleTranslationResponse | null
-  error: ApiError | null
-  status: 'idle' | 'loading' | 'success' | 'error'
+type ArticleTranslationMutationArg = {
+  payload: ArticleTranslationRequest
+  signal: AbortSignal
 }
 
 const minimumLoadingMs = 900
@@ -31,12 +32,32 @@ export function useArticleTranslation(article: StandardArticle, enabled: boolean
     ].join('\u001f'),
     [article.id, article.language, article.reader.body, article.title, article.url, targetLanguage],
   )
-  const [state, setState] = useState<ArticleTranslationState>({
-    data: null,
-    error: null,
-    status: 'idle',
-  })
+  const mutationKey = useMemo(() => `/api/article-translation:${requestKey}`, [requestKey])
   const completedRequestKeyRef = useRef<string | null>(null)
+  const {
+    data = null,
+    error: rawError,
+    isMutating,
+    trigger,
+  } = useSWRMutation<ArticleTranslationResponse, ApiError, string, ArticleTranslationMutationArg>(
+    mutationKey,
+    (_key, { arg }) => translateArticleRequest(arg.payload, { signal: arg.signal }),
+    {
+      throwOnError: false,
+    },
+  )
+  const isMinimumLoadingVisible = useMinimumVisibleLoading(isMutating, {
+    minDurationMs: minimumLoadingMs,
+    resetKey: requestKey,
+  })
+  const error = rawError && !isApiCanceledError(rawError) ? normalizeApiError(rawError) : null
+  const status = isMinimumLoadingVisible
+    ? 'loading'
+    : error
+      ? 'error'
+      : data
+        ? 'success'
+        : 'idle'
 
   useEffect(() => {
     if (!enabled) {
@@ -48,64 +69,41 @@ export function useArticleTranslation(article: StandardArticle, enabled: boolean
     }
 
     const controller = new AbortController()
-    const startedAt = Date.now()
 
-    setState({
-      data: null,
-      error: null,
-      status: 'loading',
-    })
-
-    void translateArticleRequest({
-      articleId: article.id,
-      body: article.reader.body,
-      sourceLanguage: article.language,
-      targetLanguage,
-      title: article.title,
-      url: article.url,
-    }, {
+    void trigger({
+      payload: {
+        articleId: article.id,
+        body: article.reader.body,
+        sourceLanguage: article.language,
+        targetLanguage,
+        title: article.title,
+        url: article.url,
+      },
       signal: controller.signal,
-    }).then(async (data) => {
-      await waitForMinimumDuration(startedAt, minimumLoadingMs, controller.signal)
-
-      if (controller.signal.aborted) {
+    }, {
+      throwOnError: false,
+    }).then((data) => {
+      if (!data || controller.signal.aborted) {
         return
       }
 
       completedRequestKeyRef.current = requestKey
-      setState({
-        data,
-        error: null,
-        status: 'success',
-      })
-    }).catch(async (error) => {
-      if (controller.signal.aborted || isApiCanceledError(error)) {
-        return
-      }
-
-      await waitForMinimumDuration(startedAt, minimumLoadingMs, controller.signal)
-
-      if (controller.signal.aborted) {
-        return
-      }
-
-      setState({
-        data: null,
-        error: normalizeApiError(error),
-        status: 'error',
-      })
+    }).catch(() => {
+      // SWR owns the mutation error state; canceled requests are normalized below.
     })
 
     return () => {
       controller.abort()
     }
-  }, [article, enabled, requestKey, targetLanguage])
+  }, [article, enabled, requestKey, targetLanguage, trigger])
 
   return {
-    ...state,
-    isError: state.status === 'error',
-    isLoading: state.status === 'loading',
-    isSuccess: state.status === 'success',
+    data,
+    error,
+    status,
+    isError: status === 'error',
+    isLoading: isMinimumLoadingVisible,
+    isSuccess: status === 'success',
     targetLanguage,
   }
 }
