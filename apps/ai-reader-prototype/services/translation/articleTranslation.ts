@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import {
+  extractJsonObject,
+  normalizeArticleParagraphs,
+  requestDeepSeekJsonContent,
+  truncateArticleBody,
+} from '../ai/deepSeekJson'
 import { createArticleSourceHash } from '../articles/articleSourceHash'
 import {
   findArticleTranslation,
@@ -38,17 +44,6 @@ type ArticleTranslationCache = {
   version: 1
 }
 
-type DeepSeekChatResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string
-    }
-  }>
-  error?: {
-    message?: string
-  }
-}
-
 type DeepSeekTranslationPayload = {
   body: string[]
   title: string
@@ -58,7 +53,6 @@ const cacheDirectory = path.join(process.cwd(), '.cache', 'feed-hub')
 const cachePath = path.join(cacheDirectory, 'article-translations-v1.json')
 const provider = 'deepseek' as const
 const defaultModel = 'deepseek-v4-flash'
-const defaultBaseUrl = 'https://api.deepseek.com'
 const promptVersion = 'article-translation-v1'
 const requestTimeoutMs = Number(process.env.DEEPSEEK_TRANSLATION_TIMEOUT_MS ?? 90000)
 const maxArticleChars = Number(process.env.DEEPSEEK_TRANSLATION_MAX_CHARS ?? 90000)
@@ -192,9 +186,7 @@ function toTranslationResult(
 }
 
 function normalizeTranslationInput(input: ArticleTranslationInput): ArticleTranslationInput {
-  const body = input.body
-    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
+  const body = normalizeArticleParagraphs(input.body)
   const title = input.title.trim()
   const truncatedBody = truncateArticleBody(body, maxArticleChars)
 
@@ -223,27 +215,6 @@ function normalizeTranslationInput(input: ArticleTranslationInput): ArticleTrans
   }
 }
 
-function truncateArticleBody(body: string[], maxChars: number) {
-  const nextBody: string[] = []
-  let total = 0
-
-  for (const paragraph of body) {
-    if (total >= maxChars) {
-      break
-    }
-
-    const remaining = maxChars - total
-    const nextParagraph = paragraph.length > remaining ? paragraph.slice(0, remaining).trim() : paragraph
-
-    if (nextParagraph) {
-      nextBody.push(nextParagraph)
-      total += nextParagraph.length
-    }
-  }
-
-  return nextBody
-}
-
 async function requestDeepSeekTranslation({
   apiKey,
   input,
@@ -253,51 +224,16 @@ async function requestDeepSeekTranslation({
   input: ArticleTranslationInput
   model: string
 }): Promise<DeepSeekTranslationPayload> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+  const content = await requestDeepSeekJsonContent({
+    apiKey,
+    model,
+    operationName: 'translation',
+    systemPrompt: buildTranslationSystemPrompt(input.targetLanguage),
+    timeoutMs: requestTimeoutMs,
+    userPrompt: buildTranslationUserPrompt(input),
+  })
 
-  try {
-    const response = await fetch(`${process.env.DEEPSEEK_BASE_URL ?? defaultBaseUrl}/chat/completions`, {
-      body: JSON.stringify({
-        messages: [
-          {
-            content: buildTranslationSystemPrompt(input.targetLanguage),
-            role: 'system',
-          },
-          {
-            content: buildTranslationUserPrompt(input),
-            role: 'user',
-          },
-        ],
-        model,
-        response_format: {
-          type: 'json_object',
-        },
-        temperature: 0.2,
-      }),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-      signal: controller.signal,
-    })
-    const data = await response.json() as DeepSeekChatResponse
-
-    if (!response.ok) {
-      throw new Error(data.error?.message ?? `DeepSeek translation failed with HTTP ${response.status}.`)
-    }
-
-    const content = data.choices?.[0]?.message?.content
-
-    if (!content) {
-      throw new Error('DeepSeek returned an empty translation.')
-    }
-
-    return parseTranslationPayload(content)
-  } finally {
-    clearTimeout(timeout)
-  }
+  return parseTranslationPayload(content)
 }
 
 function buildTranslationSystemPrompt(targetLanguage: ArticleTranslationLanguage) {
@@ -339,23 +275,6 @@ function parseTranslationPayload(content: string): DeepSeekTranslationPayload {
     body,
     title,
   }
-}
-
-function extractJsonObject(content: string) {
-  const trimmed = content.trim()
-
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return trimmed
-  }
-
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1)
-  }
-
-  return trimmed
 }
 
 function createCacheKey({

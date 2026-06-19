@@ -1,5 +1,11 @@
 import { createArticleSourceHash } from '../articles/articleSourceHash'
 import {
+  extractJsonObject,
+  normalizeArticleParagraphs,
+  requestDeepSeekJsonContent,
+  truncateArticleBody,
+} from './deepSeekJson'
+import {
   findArticleAiOutput,
   upsertArticleAiOutput,
   type StoredArticleAiOutput,
@@ -32,7 +38,6 @@ type DeepSeekBriefPayload = {
 
 const provider = 'deepseek' as const
 const defaultModel = 'deepseek-v4-flash'
-const defaultBaseUrl = 'https://api.deepseek.com'
 const promptVersion = 'article-brief-v1'
 const requestTimeoutMs = Number(process.env.DEEPSEEK_BRIEF_TIMEOUT_MS ?? process.env.DEEPSEEK_TRANSLATION_TIMEOUT_MS ?? 90000)
 const maxArticleChars = Number(process.env.DEEPSEEK_BRIEF_MAX_CHARS ?? 45000)
@@ -96,7 +101,7 @@ export async function generateArticleBrief(input: ArticleBriefInput): Promise<Ar
 function normalizeBriefInput(input: ArticleBriefInput): Required<ArticleBriefInput> {
   const title = input.title.trim()
   const body = truncateArticleBody(
-    input.body.map((paragraph) => paragraph.replace(/\s+/g, ' ').trim()).filter(Boolean),
+    normalizeArticleParagraphs(input.body),
     maxArticleChars,
   )
 
@@ -126,27 +131,6 @@ function normalizeBriefInput(input: ArticleBriefInput): Required<ArticleBriefInp
   }
 }
 
-function truncateArticleBody(body: string[], maxChars: number) {
-  const nextBody: string[] = []
-  let total = 0
-
-  for (const paragraph of body) {
-    if (total >= maxChars) {
-      break
-    }
-
-    const remaining = maxChars - total
-    const nextParagraph = paragraph.length > remaining ? paragraph.slice(0, remaining).trim() : paragraph
-
-    if (nextParagraph) {
-      nextBody.push(nextParagraph)
-      total += nextParagraph.length
-    }
-  }
-
-  return nextBody
-}
-
 async function requestDeepSeekBrief({
   apiKey,
   input,
@@ -158,60 +142,22 @@ async function requestDeepSeekBrief({
   model: string
   targetLanguage: 'zh-CN' | 'en'
 }): Promise<DeepSeekBriefPayload> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+  const content = await requestDeepSeekJsonContent({
+    apiKey,
+    model,
+    operationName: 'brief',
+    systemPrompt: buildBriefSystemPrompt(targetLanguage),
+    timeoutMs: requestTimeoutMs,
+    userPrompt: JSON.stringify({
+      body: input.body,
+      sourceLanguage: input.sourceLanguage,
+      targetLanguage,
+      title: input.title,
+      url: input.url,
+    }),
+  })
 
-  try {
-    const response = await fetch(`${process.env.DEEPSEEK_BASE_URL ?? defaultBaseUrl}/chat/completions`, {
-      body: JSON.stringify({
-        messages: [
-          {
-            content: buildBriefSystemPrompt(targetLanguage),
-            role: 'system',
-          },
-          {
-            content: JSON.stringify({
-              body: input.body,
-              sourceLanguage: input.sourceLanguage,
-              targetLanguage,
-              title: input.title,
-              url: input.url,
-            }),
-            role: 'user',
-          },
-        ],
-        model,
-        response_format: {
-          type: 'json_object',
-        },
-        temperature: 0.2,
-      }),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-      signal: controller.signal,
-    })
-    const data = await response.json() as {
-      choices?: Array<{ message?: { content?: string } }>
-      error?: { message?: string }
-    }
-
-    if (!response.ok) {
-      throw new Error(data.error?.message ?? `DeepSeek brief failed with HTTP ${response.status}.`)
-    }
-
-    const content = data.choices?.[0]?.message?.content
-
-    if (!content) {
-      throw new Error('DeepSeek returned an empty brief.')
-    }
-
-    return parseBriefPayload(content)
-  } finally {
-    clearTimeout(timeout)
-  }
+  return parseBriefPayload(content)
 }
 
 function buildBriefSystemPrompt(targetLanguage: 'zh-CN' | 'en') {
@@ -242,23 +188,6 @@ function parseBriefPayload(content: string): DeepSeekBriefPayload {
   }
 
   return { body, keyPoints }
-}
-
-function extractJsonObject(content: string) {
-  const trimmed = content.trim()
-
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return trimmed
-  }
-
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1)
-  }
-
-  return trimmed
 }
 
 function findArticleAiOutputSafely(
