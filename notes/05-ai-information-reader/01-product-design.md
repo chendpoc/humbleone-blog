@@ -249,6 +249,7 @@ Folo 的公开定位是 AI RSS Reader，强调让 AI 帮用户阅读互联网、
 | --- | ---------- | --------------------------------------------------------------- | ---------------- |
 | P0  | 官方更新       | CodeWhale changelog、Anthropic engineering、Pydantic / PydanticAI | 事实确定、信号强         |
 | P1  | 关键 builder | Waylandz、LitoMore、shumer.dev                                    | 能看到实践者的长期判断和项目动作 |
+| P1  | 课程/材料库    | The Modern Software Developer / CS146S                            | 系统化整理 coding LLM、agent、MCP、Claude Code、AI 安全等学习路径 |
 | P2  | 社区实战       | X、Hacker News、GitHub 热点                                         | 能看到真实使用方式和传播信号   |
 | P3  | 视频/短内容     | Bilibili、抖音                                                     | 灵感价值高，但结构化和稳定性较弱 |
 
@@ -267,6 +268,13 @@ Folo 的公开定位是 AI RSS Reader，强调让 AI 帮用户阅读互联网、
 | x-agent-cases | community       | 捕捉人们如何用 agent / Codex / Claude Code 做事       | 案例   |
 | shumer        | builder         | 跟踪独立 builder 的高价值文章                          | 有意思  |
 | litomore      | builder         | 跟踪 GitHub 项目和作者动态                            | 案例   |
+
+
+资料型来源不计入每日 5-8 个核心 source family 的数量约束。它们用于 source registry 公开说明、deep research 证据库、学习路线和后续长文沉淀，只有出现新增高价值材料或被专题调研引用时才进入 Today。
+
+| Family              | 主题             | 主要用途                                      | 默认栏目 |
+| ------------------- | ---------------- | --------------------------------------------- | ---- |
+| modern-software-dev | course-materials | 索引现代 AI 软件工程课程材料，支撑学习路线和 deep research | 案例   |
 
 
 ## 6. 信息架构
@@ -798,6 +806,7 @@ Daily Compiler 从 Feed Store 读取：
 | Pydantic      | Blog / Articles    | official_rss 或 custom                 | PydanticAI 相关优先              |
 | Hacker News   | frontpage / search | official_rss 或 hnrss                  | 只做筛选，不做全量搬运                  |
 | X Agent Cases | keyword/list       | RSSHub 或外部 API                        | 需要 token 和更严格过滤              |
+| The Modern Software Developer | Course / Syllabus Links | manual / custom static-site extractor | 资料型源；先做索引和专题证据，不作为日更流 |
 
 
 ## 13. 数据存储建议
@@ -1009,3 +1018,4 @@ v0.1 的实际实现路线：
 - [Waylandz](https://waylandz.com/)
 - [Anthropic Engineering](https://www.anthropic.com/engineering)
 - [Hacker News](https://news.ycombinator.com/news)
+- [The Modern Software Developer](https://themodernsoftware.dev/)
