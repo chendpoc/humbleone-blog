@@ -87,14 +87,14 @@ export function StandardSourceFilterMenu({
         aria-haspopup="menu"
         aria-label={t('filter.openAria')}
         title={t('filter.title')}
-        onClick={() =>
+        onClick={() => {
           setOpen((current) => {
             const nextOpen = !current
 
             onOpenChange?.(nextOpen)
             return nextOpen
           })
-        }
+        }}
       >
         <FunnelIcon />
       </button>
