@@ -1,3 +1,7 @@
 .cache/
+data/*.sqlite
+data/*.sqlite-*
+.env
+.env.local
 public/fonts/*.7z
 public/fonts/SarasaMonoSC-TTF-*/

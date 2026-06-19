@@ -12,3 +12,6 @@ apps/ai-reader-prototype/output/
 .vscode
 .codex/
 .7z
+.cache
+output
+.log
