@@ -16,13 +16,21 @@ import {
 
 const emptyConfiguredCollections: SourceCollectionConfig[] = []
 
+type UseSourceCollectionsOptions = {
+  editable?: boolean
+}
+
 export function useSourceCollections(
   baseSources: StandardSource[],
   configuredCollections = emptyConfiguredCollections,
+  options: UseSourceCollectionsOptions = {},
 ) {
-  const [state, setState] = useState<SourceCollectionState>(() =>
-    buildDefaultSourceCollectionState(baseSources, configuredCollections),
+  const editable = options.editable ?? false
+  const defaultState = useMemo(
+    () => buildDefaultSourceCollectionState(baseSources, configuredCollections),
+    [baseSources, configuredCollections],
   )
+  const [state, setState] = useState<SourceCollectionState>(() => defaultState)
   const [hydrated, setHydrated] = useState(false)
   const sourceById = useMemo(
     () => new Map(baseSources.map((source) => [source.feedSourceId, source])),
@@ -31,19 +39,27 @@ export function useSourceCollections(
   const sources = useMemo(() => applySourceCollectionState(baseSources, state), [baseSources, state])
 
   useEffect(() => {
-    setState(reconcileSourceCollectionState(baseSources, readSourceCollectionState(), configuredCollections))
-    setHydrated(true)
-  }, [baseSources, configuredCollections])
+    setState(
+      editable
+        ? reconcileSourceCollectionState(baseSources, readSourceCollectionState(), configuredCollections)
+        : defaultState,
+    )
+    setHydrated(editable)
+  }, [baseSources, configuredCollections, defaultState, editable])
 
   useEffect(() => {
-    if (!hydrated) {
+    if (!editable || !hydrated) {
       return
     }
 
     writeSourceCollectionState(reconcileSourceCollectionState(baseSources, state, configuredCollections))
-  }, [baseSources, configuredCollections, hydrated, state])
+  }, [baseSources, configuredCollections, editable, hydrated, state])
 
   const createCollection = useCallback((name: string) => {
+    if (!editable) {
+      return
+    }
+
     const normalizedName = normalizeSourceCollectionName(name)
 
     if (!normalizedName) {
@@ -65,9 +81,13 @@ export function useSourceCollections(
         ],
       }
     })
-  }, [])
+  }, [editable])
 
   const renameCollection = useCallback((collectionId: string, name: string) => {
+    if (!editable) {
+      return
+    }
+
     const normalizedName = normalizeSourceCollectionName(name)
 
     if (!normalizedName) {
@@ -82,9 +102,13 @@ export function useSourceCollections(
           : collection,
       ),
     }))
-  }, [])
+  }, [editable])
 
   const deleteCollection = useCallback((collectionId: string) => {
+    if (!editable) {
+      return
+    }
+
     setState((current) => {
       if (current.collections.length <= 1) {
         return current
@@ -114,9 +138,13 @@ export function useSourceCollections(
         ),
       }
     })
-  }, [])
+  }, [editable])
 
   const addSourcesToCollection = useCallback((collectionId: string, sourceIds: string[]) => {
+    if (!editable) {
+      return
+    }
+
     const validSourceIds = sourceIds.filter((sourceId) => sourceById.has(sourceId))
 
     if (!validSourceIds.length) {
@@ -131,9 +159,13 @@ export function useSourceCollections(
           : collection,
       ),
     }))
-  }, [sourceById])
+  }, [editable, sourceById])
 
   const removeSourceFromCollection = useCallback((collectionId: string, sourceId: string) => {
+    if (!editable) {
+      return
+    }
+
     setState((current) => {
       const nextState = {
         ...current,
@@ -146,9 +178,13 @@ export function useSourceCollections(
 
       return ensureSourceHasCollection(nextState, sourceId)
     })
-  }, [])
+  }, [editable])
 
   const moveSourceToCollection = useCallback((sourceId: string, fromCollectionId: string, toCollectionId: string, beforeSourceId?: string) => {
+    if (!editable) {
+      return
+    }
+
     if (!sourceById.has(sourceId)) {
       return
     }
@@ -200,9 +236,13 @@ export function useSourceCollections(
         }),
       }
     })
-  }, [sourceById])
+  }, [editable, sourceById])
 
   const renameSource = useCallback((sourceId: string, name: string) => {
+    if (!editable) {
+      return
+    }
+
     const normalizedName = normalizeSourceCollectionName(name)
 
     setState((current) => {
@@ -220,11 +260,11 @@ export function useSourceCollections(
         sourceAliases: nextAliases,
       }
     })
-  }, [sourceById])
+  }, [editable, sourceById])
 
   const resetCollections = useCallback(() => {
-    setState(buildDefaultSourceCollectionState(baseSources, configuredCollections))
-  }, [baseSources, configuredCollections])
+    setState(defaultState)
+  }, [defaultState])
 
   return {
     collections: state.collections,
