@@ -1,33 +1,47 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGsapElementEntrance } from '../../hooks/useGsapMotion'
+import type { StandardSource } from '../../types/reader'
 import { joinClasses } from '../../utils/readerUtils'
-import { FunnelIcon } from './ReaderIcons'
+import { ChevronRightIcon, Cog6ToothIcon, FunnelIcon } from './ReaderIcons'
 
 type StandardSourceFilterMenuProps = {
   activeCount: number
+  selectedSourceId: string | null
+  sources: StandardSource[]
   totalCount: number
   showActiveOnly: boolean
+  updatingSourceId?: string | null
   onCollapseAll: () => void
+  onEditSourceConfig: (source: StandardSource) => void
   onExpandAll: () => void
   onOpenChange?: (open: boolean) => void
+  onSelectSource: (sourceId: string) => void
   onShowActiveOnlyChange: (value: boolean) => void
+  onToggleSourceFetch: (source: StandardSource) => void
 }
 
 export function StandardSourceFilterMenu({
   activeCount,
+  selectedSourceId,
+  sources,
   totalCount,
   showActiveOnly,
+  updatingSourceId = null,
   onCollapseAll,
+  onEditSourceConfig,
   onExpandAll,
   onOpenChange,
+  onSelectSource,
   onShowActiveOnlyChange,
+  onToggleSourceFetch,
 }: StandardSourceFilterMenuProps) {
   const { t } = useTranslation('reader')
   const [open, setOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [viewPage, setViewPage] = useState<'main' | 'allSources'>('main')
   const popoverRef = useRef<HTMLDivElement>(null)
 
   useGsapElementEntrance(popoverRef, open, {
@@ -36,102 +50,163 @@ export function StandardSourceFilterMenu({
     y: -6,
   })
 
-  useEffect(() => {
-    if (!open) {
-      return
+  function updateOpen(nextOpen: boolean) {
+    setOpen(nextOpen)
+
+    if (!nextOpen) {
+      setViewPage('main')
     }
 
-    function onPointerDown(event: PointerEvent) {
-      if (menuRef.current?.contains(event.target as Node)) {
-        return
-      }
-
-      setOpen(false)
-      onOpenChange?.(false)
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOpen(false)
-        onOpenChange?.(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [onOpenChange, open])
+    onOpenChange?.(nextOpen)
+  }
 
   function selectSourceScope(activeOnly: boolean) {
     onShowActiveOnlyChange(activeOnly)
-    setOpen(false)
-    onOpenChange?.(false)
+    updateOpen(false)
   }
 
   function runMenuAction(action: () => void) {
     action()
-    setOpen(false)
-    onOpenChange?.(false)
+    updateOpen(false)
+  }
+
+  function selectSource(sourceId: string) {
+    onSelectSource(sourceId)
+    updateOpen(false)
+  }
+
+  function editSourceConfig(source: StandardSource) {
+    updateOpen(false)
+    onEditSourceConfig(source)
+  }
+
+  function formatFetchWindow(source: StandardSource) {
+    const lookbackDays = source.fetchLookbackDays ?? 365
+
+    if (lookbackDays === 365) {
+      return t('sources.fetchLastYear')
+    }
+
+    return t('sources.fetchLastDays', { count: lookbackDays })
   }
 
   return (
-    <div className="standard-source-filter-menu" ref={menuRef}>
-      <button
-        type="button"
-        className={joinClasses('standard-source-filter-trigger', showActiveOnly && 'is-active')}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={t('filter.openAria')}
-        title={t('filter.title')}
-        onClick={() => {
-          setOpen((current) => {
-            const nextOpen = !current
-
-            onOpenChange?.(nextOpen)
-            return nextOpen
-          })
-        }}
-      >
-        <FunnelIcon />
-      </button>
-      {open ? (
-        <div ref={popoverRef} className="standard-source-filter-popover" role="menu">
-          <span>{t('filter.sourceView')}</span>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={!showActiveOnly}
-            className={!showActiveOnly ? 'is-selected' : undefined}
-            onClick={() => selectSourceScope(false)}
-          >
-            <strong>{t('filter.allSources')}</strong>
-            <small>{t('filter.allFeeds', { count: totalCount })}</small>
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={showActiveOnly}
-            className={showActiveOnly ? 'is-selected' : undefined}
-            onClick={() => selectSourceScope(true)}
-          >
-            <strong>{t('filter.activeOnly')}</strong>
-            <small>{t('filter.activeLive', { count: activeCount })}</small>
-          </button>
-          <i />
-          <button type="button" role="menuitem" onClick={() => runMenuAction(onExpandAll)}>
-            <strong>{t('filter.expandGroups')}</strong>
-            <small>{t('filter.expandHint')}</small>
-          </button>
-          <button type="button" role="menuitem" onClick={() => runMenuAction(onCollapseAll)}>
-            <strong>{t('filter.collapseGroups')}</strong>
-            <small>{t('filter.collapseHint')}</small>
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <DropdownMenu.Root open={open} onOpenChange={updateOpen}>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className={joinClasses('standard-source-filter-trigger', showActiveOnly && 'is-active')}
+          aria-label={t('filter.openAria')}
+          title={t('filter.title')}
+        >
+          <FunnelIcon />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content ref={popoverRef} className="standard-source-filter-popover" align="end" sideOffset={8}>
+          {viewPage === 'allSources' ? (
+            <>
+              <DropdownMenu.Item
+                className="standard-source-filter-back"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setViewPage('main')
+                }}
+              >
+                <ChevronRightIcon />
+                <strong>{t('filter.sourceView')}</strong>
+                <small>{t('sources.sourceCount', { count: sources.length })}</small>
+              </DropdownMenu.Item>
+              <DropdownMenu.Group
+                className="standard-source-filter-source-list"
+                aria-label={t('sources.allSourcesInventoryAria')}
+              >
+                {sources.map((source) => (
+                  <div
+                    key={source.feedSourceId}
+                    role="group"
+                    aria-label={source.label}
+                    className={joinClasses(
+                      'standard-source-filter-source-row',
+                      source.active && 'is-active',
+                      source.health === 'failed' && 'is-failed',
+                      selectedSourceId === source.feedSourceId && 'is-selected',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="standard-source-filter-source-main"
+                      onClick={() => selectSource(source.feedSourceId)}
+                    >
+                      <span className="standard-source-dot" />
+                      <span>
+                        <strong>{source.label}</strong>
+                        <small>
+                          {t(`categories.${source.sourceFamily ?? source.category}`, { defaultValue: source.category })}
+                          {' · '}
+                          {t(`sources.tabs.${source.contentType}`)}
+                        </small>
+                      </span>
+                      <em>{source.adapter ?? t('sources.noAdapter')}</em>
+                      <small>{formatFetchWindow(source)}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className={joinClasses('standard-source-fetch-toggle', source.fetchEnabled && 'is-on')}
+                      aria-label={t('sourceManagement.sourceFetchToggleAria', { name: source.label })}
+                      aria-pressed={Boolean(source.fetchEnabled)}
+                      disabled={!source.fetchConfigurable || updatingSourceId === source.feedSourceId}
+                      onClick={() => onToggleSourceFetch(source)}
+                    >
+                      <span>{source.fetchEnabled ? t('sourceManagement.fetchOn') : t('sourceManagement.fetchOff')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="standard-source-filter-config-button"
+                      aria-label={t('sourceManagement.sourceConfigAria', { name: source.label })}
+                      onClick={() => editSourceConfig(source)}
+                    >
+                      <Cog6ToothIcon />
+                    </button>
+                  </div>
+                ))}
+              </DropdownMenu.Group>
+            </>
+          ) : (
+            <>
+              <span>{t('filter.sourceView')}</span>
+              <DropdownMenu.Item
+                className="standard-source-filter-option"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  onShowActiveOnlyChange(false)
+                  setViewPage('allSources')
+                }}
+              >
+                <strong>{t('filter.allSources')}</strong>
+                <small>{t('filter.allFeeds', { count: totalCount })}</small>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                aria-checked={showActiveOnly}
+                className={joinClasses('standard-source-filter-option', showActiveOnly && 'is-selected')}
+                onSelect={() => selectSourceScope(true)}
+              >
+                <strong>{t('filter.activeOnly')}</strong>
+                <small>{t('filter.activeLive', { count: activeCount })}</small>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="standard-source-filter-separator" />
+              <DropdownMenu.Item className="standard-source-filter-option" onSelect={() => runMenuAction(onExpandAll)}>
+                <strong>{t('filter.expandGroups')}</strong>
+                <small>{t('filter.expandHint')}</small>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className="standard-source-filter-option" onSelect={() => runMenuAction(onCollapseAll)}>
+                <strong>{t('filter.collapseGroups')}</strong>
+                <small>{t('filter.collapseHint')}</small>
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   )
 }

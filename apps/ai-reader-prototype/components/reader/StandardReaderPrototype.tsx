@@ -16,13 +16,37 @@ import { StandardArticleRestorePanel } from './StandardArticleRestorePanel'
 
 type StandardReaderPrototypeProps = {
   brief: DailyBrief
+  canLoadMoreFeed?: boolean
   initialState?: StandardReaderInitialState
+  loadingMoreFeed?: boolean
+  loadedFeedCount?: number
   onRefreshFeed?: () => Promise<DailyBrief | null>
+  onLoadMoreFeed?: () => Promise<void> | void
+  onSourceConfigChanged?: () => Promise<void> | void
+  onSelectedSourceIdChange?: (sourceId: string | null) => void
+  selectedSourceId?: string | null
+  totalFeedCount?: number
 }
 
-export function StandardReaderPrototype({ brief, initialState, onRefreshFeed }: StandardReaderPrototypeProps) {
+export function StandardReaderPrototype({
+  brief,
+  canLoadMoreFeed = false,
+  initialState,
+  loadingMoreFeed = false,
+  loadedFeedCount = brief.itemCount,
+  onLoadMoreFeed,
+  onRefreshFeed,
+  onSelectedSourceIdChange,
+  onSourceConfigChanged,
+  selectedSourceId,
+  totalFeedCount = brief.itemCount,
+}: StandardReaderPrototypeProps) {
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const readerState = useStandardReaderState(brief, initialState, { onRefreshFeed })
+  const readerState = useStandardReaderState(brief, initialState, {
+    onRefreshFeed,
+    onSelectedSourceIdChange,
+    selectedSourceId,
+  })
   useStandardReaderKeyboard({
     hasActiveFilters: readerState.hasActiveFilters,
     actions: readerState.actions,
@@ -106,6 +130,7 @@ export function StandardReaderPrototype({ brief, initialState, onRefreshFeed }: 
               onCollapse={controls.collapseSourcesPanel}
               onSelectLibraryFilter={readerState.actions.selectLibraryFilter}
               onSelectSource={readerState.actions.selectSource}
+              onSourceConfigChanged={onSourceConfigChanged}
             />
           )
         )}
@@ -123,13 +148,18 @@ export function StandardReaderPrototype({ brief, initialState, onRefreshFeed }: 
             actionNotice={readerState.actionNotice}
             feedNotice={readerState.feedNotice}
             feedRefreshing={readerState.feedRefreshing}
+            hasMoreArticles={canLoadMoreFeed}
             libraryFilter={readerState.libraryFilter}
+            loadedArticleCount={loadedFeedCount}
+            loadingMoreArticles={loadingMoreFeed}
+            totalArticleCount={totalFeedCount}
             onSelectArticle={readerState.actions.selectArticle}
             onClearLibraryFilter={readerState.actions.clearLibraryFilter}
             onClearSource={readerState.actions.clearSourceFilter}
             onRestoreArticlePanel={readerState.actions.openArticlePanel}
             onFavoriteArticle={readerState.actions.toggleFavoriteArticle}
             onMarkAllRead={readerState.actions.markAllRead}
+            onLoadMoreArticles={onLoadMoreFeed}
             onRefreshFeed={readerState.actions.refreshFeed}
             onSaveArticle={readerState.actions.toggleSaveArticle}
             onShareArticle={readerState.actions.shareArticle}

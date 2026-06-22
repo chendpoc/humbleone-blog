@@ -7,6 +7,7 @@ import { useGsapElementEntrance, useGsapElementPulse } from '../../hooks/useGsap
 import { useSourceCollections } from '../../hooks/useSourceCollections'
 import { useSourcePanelPreferences } from '../../hooks/useSourcePanelPreferences'
 import type { SourceCollectionConfig, SourceContentType } from '../../lib/prototype-data'
+import { updateSourceFeedHubConfig } from '../../services/api/sourceRegistryApi'
 import type { SourceCollection, StandardLibraryFilter, StandardSource } from '../../types/reader'
 import {
   ArrowLeftStartOnRectangleIcon,
@@ -16,6 +17,7 @@ import {
   PlayCircleIcon,
   Squares2X2Icon,
 } from './ReaderIcons'
+import { StandardSourceConfigDialog, type StandardSourceConfigDialogValue } from './StandardSourceConfigDialog'
 import { StandardSourceFilterMenu } from './StandardSourceFilterMenu'
 import { StandardSourceGroup } from './StandardSourceGroup'
 import { StandardSourceGroupsToolbar } from './StandardSourceGroupsToolbar'
@@ -32,6 +34,7 @@ type StandardSourcesPanelProps = {
   onCollapse: () => void
   onSelectLibraryFilter?: (filter: StandardLibraryFilter) => void
   onSelectSource: (sourceId: string) => void
+  onSourceConfigChanged?: () => Promise<void> | void
 }
 
 type SourceContentFilter = SourceContentType | 'all'
@@ -55,11 +58,15 @@ export function StandardSourcesPanel({
   onCollapse,
   onSelectLibraryFilter,
   onSelectSource,
+  onSourceConfigChanged,
 }: StandardSourcesPanelProps) {
   const { t } = useTranslation('reader')
   const panelRef = useRef<HTMLElement>(null)
   const [selectedContentType, setSelectedContentType] = useState<SourceContentFilter>('all')
   const [filterMenuMotionKey, setFilterMenuMotionKey] = useState(0)
+  const [configSourceId, setConfigSourceId] = useState<string | null>(null)
+  const [configSavingSourceId, setConfigSavingSourceId] = useState<string | null>(null)
+  const [configSubmitError, setConfigSubmitError] = useState<string | null>(null)
   const sourceCollections = useSourceCollections(sources, configuredCollections)
   const groupIds = useMemo(
     () => sourceCollections.collections.map((collection) => collection.id),
@@ -67,6 +74,10 @@ export function StandardSourcesPanel({
   )
   const sourcePanelPreferences = useSourcePanelPreferences(groupIds)
   const { collapsedGroups, showActiveOnly } = sourcePanelPreferences
+  const configSource = useMemo(
+    () => sourceCollections.sources.find((source) => source.feedSourceId === configSourceId) ?? null,
+    [configSourceId, sourceCollections.sources],
+  )
   const contentCounts = useMemo(() => {
     const counts = countBy(sourceCollections.sources, 'contentType') as Partial<Record<SourceContentType, number>>
 
@@ -104,6 +115,48 @@ export function StandardSourcesPanel({
       : collection.name
   }
 
+  function openSourceConfig(source: StandardSource) {
+    setConfigSubmitError(null)
+    setConfigSourceId(source.feedSourceId)
+  }
+
+  async function submitSourceConfig(source: StandardSource, value: StandardSourceConfigDialogValue) {
+    await saveSourceConfig(source, value)
+    setConfigSourceId(null)
+  }
+
+  async function toggleSourceFetch(source: StandardSource) {
+    await saveSourceConfig(source, {
+      enabled: !source.fetchEnabled,
+      lookbackDays: source.fetchLookbackDays ?? 365,
+    })
+  }
+
+  async function saveSourceConfig(source: StandardSource, value: StandardSourceConfigDialogValue) {
+    if (!source.fetchConfigurable) {
+      setConfigSubmitError(t('sourceManagement.sourceConfigUnavailable'))
+      setConfigSourceId(source.feedSourceId)
+      return
+    }
+
+    setConfigSavingSourceId(source.feedSourceId)
+    setConfigSubmitError(null)
+
+    try {
+      await updateSourceFeedHubConfig({
+        sourceId: source.feedSourceId,
+        enabled: value.enabled,
+        lookbackDays: value.lookbackDays,
+      })
+      await onSourceConfigChanged?.()
+    } catch (error) {
+      setConfigSubmitError(readErrorMessage(error))
+      setConfigSourceId(source.feedSourceId)
+    } finally {
+      setConfigSavingSourceId(null)
+    }
+  }
+
   useGsapElementEntrance(panelRef, 'standard-sources-panel', {
     duration: 0.22,
     scale: 0.985,
@@ -131,12 +184,18 @@ export function StandardSourcesPanel({
             </small>
             <StandardSourceFilterMenu
               activeCount={activeSources}
+              selectedSourceId={selectedSourceId}
+              sources={sourceCollections.sources}
               totalCount={sources.length}
               showActiveOnly={showActiveOnly}
+              updatingSourceId={configSavingSourceId}
               onCollapseAll={sourcePanelPreferences.actions.collapseAllGroups}
+              onEditSourceConfig={openSourceConfig}
               onExpandAll={sourcePanelPreferences.actions.expandAllGroups}
               onOpenChange={() => setFilterMenuMotionKey((current) => current + 1)}
+              onSelectSource={onSelectSource}
               onShowActiveOnlyChange={sourcePanelPreferences.actions.setShowActiveOnly}
+              onToggleSourceFetch={toggleSourceFetch}
             />
             <button type="button" aria-label={t('sources.collapseAria')} onClick={onCollapse}>
               <ArrowLeftStartOnRectangleIcon />
@@ -190,6 +249,37 @@ export function StandardSourcesPanel({
         libraryFilter={libraryFilter}
         onSelectLibraryFilter={onSelectLibraryFilter}
       />
+      <StandardSourceConfigDialog
+        open={Boolean(configSource)}
+        source={configSource}
+        submitError={configSubmitError}
+        submitting={Boolean(configSource && configSavingSourceId === configSource.feedSourceId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfigSourceId(null)
+            setConfigSubmitError(null)
+          }
+        }}
+        onSubmit={(value) => {
+          if (!configSource) {
+            return
+          }
+
+          return submitSourceConfig(configSource, value)
+        }}
+      />
     </aside>
   )
+}
+
+function readErrorMessage(error: unknown) {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Source config update failed.'
 }

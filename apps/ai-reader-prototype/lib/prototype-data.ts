@@ -47,6 +47,9 @@ export type SourceDeskItem = {
   contentType?: SourceContentType;
   topicTags?: string[];
   adapter?: string;
+  fetchLookbackDays?: number;
+  fetchConfigurable?: boolean;
+  fetchEnabled?: boolean;
   health: SourceHealth;
   state: SourceDeskItemState;
   description?: string;

@@ -8,6 +8,7 @@ import {
   BookmarkIcon,
   BookmarkSolidIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
   ClockIcon,
   ExternalIcon,
   EyeIcon,
@@ -32,13 +33,18 @@ type StandardFeedPanelProps = {
   actionNotice?: StandardActionNotice
   feedNotice?: string | null
   feedRefreshing?: boolean
+  hasMoreArticles?: boolean
+  loadingMoreArticles?: boolean
   libraryFilter?: StandardLibraryFilter | null
+  loadedArticleCount?: number
+  totalArticleCount?: number
   onSelectArticle: (articleId: string) => void
   onClearSource: () => void
   onClearLibraryFilter?: () => void
   onRestoreArticlePanel?: () => void
   onFavoriteArticle?: (articleId: string) => void
   onMarkAllRead?: () => void
+  onLoadMoreArticles?: () => void
   onRefreshFeed?: () => void
   onSaveArticle?: (articleId: string) => void
   onShareArticle?: (articleId: string) => void
@@ -62,13 +68,18 @@ export function StandardFeedPanel({
   actionNotice = null,
   feedNotice = null,
   feedRefreshing = false,
+  hasMoreArticles = false,
+  loadingMoreArticles = false,
   libraryFilter = null,
+  loadedArticleCount = articles.length,
+  totalArticleCount = articles.length,
   onSelectArticle,
   onClearSource,
   onClearLibraryFilter,
   onRestoreArticlePanel,
   onFavoriteArticle,
   onMarkAllRead,
+  onLoadMoreArticles,
   onRefreshFeed,
   onSaveArticle,
   onShareArticle,
@@ -111,7 +122,7 @@ export function StandardFeedPanel({
                 ? t('feed.unreadList')
                 : t('feed.list')}
           </span>
-          <small>{t('feed.shownUnread', { shown: articles.length, unread: unreadCount })}</small>
+          <small>{t('feed.shownUnread', { shown: articles.length, total: totalArticleCount, unread: unreadCount })}</small>
           {feedNotice ? <strong aria-live="polite">{feedNotice}</strong> : null}
         </div>
         <div className="standard-feed-toolbar-actions" aria-label={t('feed.actionsAria')}>
@@ -277,6 +288,22 @@ export function StandardFeedPanel({
             <span>{t('feed.emptyHint')}</span>
           </div>
         )}
+        {articles.length ? (
+          <div className="standard-feed-load-more">
+            <span>{t('feed.pageStatus', { loaded: loadedArticleCount, total: totalArticleCount })}</span>
+            <button
+              type="button"
+              disabled={!hasMoreArticles || loadingMoreArticles}
+              aria-busy={loadingMoreArticles}
+              onClick={() => {
+                void onLoadMoreArticles?.()
+              }}
+            >
+              <ChevronDownIcon />
+              <span>{loadingMoreArticles ? t('feed.loadingMore') : hasMoreArticles ? t('feed.loadMore') : t('feed.noMore')}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   )

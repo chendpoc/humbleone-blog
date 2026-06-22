@@ -20,7 +20,9 @@ import { readStandardReaderInitialStateFromSearch, writeStandardReaderUrlState }
 import { buildSources, flattenArticles, getSelectedArticle } from '../utils/standardReaderModel'
 
 type UseStandardReaderStateOptions = {
+  onSelectedSourceIdChange?: (sourceId: string | null) => void
   onRefreshFeed?: () => Promise<DailyBrief | null>
+  selectedSourceId?: string | null
 }
 
 export function useStandardReaderState(
@@ -45,9 +47,11 @@ export function useStandardReaderState(
   const [selectedArticleId, setSelectedArticleId] = useState(
     () => explicitInitialState.selectedArticleId ?? brief.selectedItemId,
   )
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(
+  const [internalSelectedSourceId, setInternalSelectedSourceId] = useState<string | null>(
     () => explicitInitialState.selectedSourceId ?? null,
   )
+  const sourceStateControlled = Boolean(options.onSelectedSourceIdChange)
+  const selectedSourceId = sourceStateControlled ? options.selectedSourceId ?? null : internalSelectedSourceId
   const [selectedRailMode, setSelectedRailMode] = useState('sources')
   const [searchQuery, setSearchQuery] = useState(() => explicitInitialState.searchQuery ?? '')
   const [articlePanelOpen, setArticlePanelOpen] = useState(() => explicitInitialState.articlePanelOpen ?? true)
@@ -134,7 +138,7 @@ export function useStandardReaderState(
     )
 
     setSelectedArticleId(urlInitialState.selectedArticleId ?? brief.selectedItemId)
-    setSelectedSourceId(urlInitialState.selectedSourceId ?? null)
+    setReaderSelectedSourceId(urlInitialState.selectedSourceId ?? null)
     setSearchQuery(urlInitialState.searchQuery ?? '')
     setArticlePanelOpen(urlInitialState.articlePanelOpen ?? true)
     setUrlHydrated(true)
@@ -187,15 +191,15 @@ export function useStandardReaderState(
 
   function selectSource(sourceId: string) {
     setLibraryFilter(null)
-    setSelectedSourceId((current) => (current === sourceId ? null : sourceId))
+    setReaderSelectedSourceId(selectedSourceId === sourceId ? null : sourceId)
   }
 
   function clearSourceFilter() {
-    setSelectedSourceId(null)
+    setReaderSelectedSourceId(null)
   }
 
   function selectLibraryFilter(filter: StandardLibraryFilter) {
-    setSelectedSourceId(null)
+    setReaderSelectedSourceId(null)
     setLibraryFilter((current) => (current === filter ? null : filter))
   }
 
@@ -233,9 +237,18 @@ export function useStandardReaderState(
 
   function clearReaderFilters() {
     setSearchQuery('')
-    setSelectedSourceId(null)
+    setReaderSelectedSourceId(null)
     setShowUnreadOnly(false)
     setLibraryFilter(null)
+  }
+
+  function setReaderSelectedSourceId(sourceId: string | null) {
+    if (options.onSelectedSourceIdChange) {
+      options.onSelectedSourceIdChange(sourceId)
+      return
+    }
+
+    setInternalSelectedSourceId(sourceId)
   }
 
   function markAllRead() {

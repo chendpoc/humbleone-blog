@@ -47,9 +47,10 @@ function ReaderAppDataFallback() {
 }
 
 export function ReaderAppClient() {
-  const [mounted, setMounted] = useState(false)
-  const feedHubBrief = useFeedHubBrief()
   const searchParams = useSearchParams()
+  const [mounted, setMounted] = useState(false)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(() => normalizeSourceId(searchParams.get('source')))
+  const feedHubBrief = useFeedHubBrief({ sourceId: selectedSourceId })
   const brief = feedHubBrief.data?.brief ?? dailyBrief
 
   useEffect(() => {
@@ -82,13 +83,31 @@ export function ReaderAppClient() {
       ) : (
         <StandardReaderPrototype
           brief={brief}
+          canLoadMoreFeed={feedHubBrief.canLoadMore}
+          loadedFeedCount={feedHubBrief.data ? feedHubBrief.loadedCount : brief.itemCount}
+          loadingMoreFeed={feedHubBrief.isLoadingMore}
+          selectedSourceId={selectedSourceId}
+          totalFeedCount={feedHubBrief.data ? feedHubBrief.totalCount : brief.itemCount}
+          onLoadMoreFeed={async () => {
+            await feedHubBrief.loadMore()
+          }}
           onRefreshFeed={async () => {
             const response = await feedHubBrief.refresh()
 
             return response?.brief ?? null
           }}
+          onSelectedSourceIdChange={setSelectedSourceId}
+          onSourceConfigChanged={async () => {
+            await feedHubBrief.refetch()
+          }}
         />
       )}
     </I18nProvider>
   )
+}
+
+function normalizeSourceId(value: string | null) {
+  const trimmed = value?.trim()
+
+  return trimmed || null
 }

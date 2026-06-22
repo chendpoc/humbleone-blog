@@ -22,7 +22,9 @@ export function buildSources(brief: DailyBrief): StandardSource[] {
     return {
       ...source,
       category: source.sourceFamily ?? 'general',
-      active: source.health !== 'failed' && source.state !== 'stale',
+      active: source.fetchConfigurable
+        ? Boolean(source.fetchEnabled) && source.health !== 'failed' && source.state !== 'stale'
+        : source.health !== 'failed' && source.state !== 'stale',
       contentType: source.contentType ?? (source.sourceFamily === 'community' ? 'social' : 'article'),
       feedSourceId,
     }
