@@ -8,6 +8,8 @@ import type { FeedHubSourceConfig, FeedHubSourceResult, NormalizedFeedSource } f
 export type SourceFetchState = {
   enabled: boolean
   itemCount: number
+  normalizedItemCount?: number
+  rawItemCount?: number
   lastCheckedAt?: string
   lastError?: string
   lastFeedHash?: string
@@ -24,6 +26,8 @@ export type SourceFetchState = {
 type SourceFetchStateRow = {
   enabled: 0 | 1
   item_count: number
+  normalized_item_count: number | null
+  raw_item_count: number | null
   last_checked_at: string | null
   last_error: string | null
   last_feed_hash: string | null
@@ -39,6 +43,23 @@ type SourceFetchStateRow = {
 
 type FeedItemRow = {
   item_json: string
+}
+
+type FeedItemBySourceRow = FeedItemRow & {
+  source_id: string
+}
+
+type PaginationWindow = {
+  limit: number
+  offset: number
+}
+
+export type StoredFeedSourcesResult = {
+  sources: NormalizedFeedSource[]
+  hasMore: boolean
+  nextOffset?: number
+  returnedCount: number
+  totalCount: number
 }
 
 type UpsertFeedSourceInput = {
@@ -102,26 +123,77 @@ export function getDueFeedHubSources({
 
 export function readStoredFeedSources(
   sources: Array<{ config: FeedHubSourceConfig; registry: SourceRegistryRecord }>,
-): NormalizedFeedSource[] {
-  return sources.map(({ config, registry }) => {
-    const rows = getReaderDatabase()
-      .prepare(`
-        SELECT item_json
-        FROM feed_items
-        WHERE source_id = ?
-        ORDER BY published_at DESC
-        LIMIT ?
-      `)
-      .all(config.sourceId, config.maxItems) as FeedItemRow[]
+  pagination: PaginationWindow,
+): StoredFeedSourcesResult {
+  const db = getReaderDatabase()
+  const { limit, offset } = normalizeFeedHubPagination(pagination)
 
+  if (!sources.length) {
     return {
+      sources: [],
+      hasMore: false,
+      returnedCount: 0,
+      totalCount: 0,
+    }
+  }
+
+  const conditions = sources
+    .map(() => '(source_id = ? AND published_at >= ?)')
+    .join(' OR ')
+  const params = sources.flatMap(({ config }) => [config.sourceId, getLookbackStartAt(config.lookbackDays)])
+
+  const totalCountRow = db
+    .prepare(`
+      SELECT COUNT(*) AS total_count
+      FROM feed_items
+      WHERE ${conditions}
+    `)
+    .all(...params) as Array<{ total_count: number }>
+
+  const totalCount = Number(totalCountRow.at(0)?.total_count ?? 0)
+
+  const rows = db
+    .prepare(`
+      SELECT source_id, item_json
+      FROM feed_items
+      WHERE ${conditions}
+      ORDER BY published_at DESC
+      LIMIT ? OFFSET ?
+    `)
+    .all(...params, limit, offset) as FeedItemBySourceRow[]
+
+  const hydratedItems = applyCachedArticleContentToFeedItems(
+    rows
+      .map((row) => parseFeedItem(row.item_json))
+      .filter((item): item is FeedItem => Boolean(item)),
+  )
+  const itemsBySourceId = new Map<string, FeedItem[]>()
+
+  hydratedItems.forEach((item) => {
+    const sourceItems = itemsBySourceId.get(item.sourceId)
+
+    if (sourceItems) {
+      sourceItems.push(item)
+      return
+    }
+
+    itemsBySourceId.set(item.sourceId, [item])
+  })
+
+  const returnedCount = hydratedItems.length
+  const hasMore = offset + returnedCount < totalCount
+
+  return {
+    sources: sources.map(({ config, registry }) => ({
       config,
       registry,
-      items: applyCachedArticleContentToFeedItems(
-        rows.map((row) => parseFeedItem(row.item_json)).filter((item): item is FeedItem => Boolean(item)),
-      ),
-    }
-  }).filter((source) => source.items.length)
+      items: itemsBySourceId.get(config.sourceId) ?? [],
+    })),
+    hasMore,
+    nextOffset: hasMore ? offset + returnedCount : undefined,
+    returnedCount,
+    totalCount,
+  }
 }
 
 export function readSourceResultsFromState(sources: FeedHubSourceConfig[]): FeedHubSourceResult[] {
@@ -132,18 +204,31 @@ export function readSourceResultsFromState(sources: FeedHubSourceConfig[]): Feed
 
     if (!state) {
       return {
+        endpoint: source.endpoint,
+        fetchMethod: source.fetchMethod,
         sourceId: source.sourceId,
         rsshubRoute: source.rsshubRoute,
         itemCount: 0,
+        normalizedItemCount: 0,
+        rawItemCount: 0,
+        fetchedItemCount: 0,
         status: 'empty',
       }
     }
 
+    const normalizedItemCount = state.normalizedItemCount ?? 0
+
     return {
+      endpoint: source.endpoint,
+      fetchMethod: source.fetchMethod,
       sourceId: source.sourceId,
       rsshubRoute: source.rsshubRoute,
-      itemCount: state.itemCount,
-      status: state.status === 'failed' ? 'failed' : state.itemCount ? 'ok' : 'empty',
+      itemCount: normalizedItemCount,
+      fetchedItemCount: state.itemCount,
+      normalizedItemCount: state.normalizedItemCount,
+      rawItemCount: state.rawItemCount,
+      upstreamItemCount: state.rawItemCount,
+      status: state.status === 'failed' ? 'failed' : normalizedItemCount ? 'ok' : 'empty',
       error: state.lastError,
     }
   })
@@ -157,7 +242,8 @@ export function upsertFeedHubSourceResult({
 }: UpsertFeedSourceInput) {
   const db = getReaderDatabase()
   const now = new Date(fetchedAt)
-  const items = source?.items ?? []
+  const items = dedupeFeedItems(source?.items ?? [])
+  const storedItemCount = items.length
   const feedHash = createFeedHash(items)
   const lastItemPublishedAt = items
     .map((item) => item.publishedAt)
@@ -172,6 +258,8 @@ export function upsertFeedHubSourceResult({
         update_frequency,
         status,
         item_count,
+        raw_item_count,
+        normalized_item_count,
         last_checked_at,
         last_success_at,
         next_check_at,
@@ -180,13 +268,15 @@ export function upsertFeedHubSourceResult({
         last_item_published_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id) DO UPDATE SET
         rsshub_route = excluded.rsshub_route,
         enabled = excluded.enabled,
         update_frequency = excluded.update_frequency,
         status = excluded.status,
         item_count = excluded.item_count,
+        raw_item_count = excluded.raw_item_count,
+        normalized_item_count = excluded.normalized_item_count,
         last_checked_at = excluded.last_checked_at,
         last_success_at = COALESCE(excluded.last_success_at, source_fetch_states.last_success_at),
         next_check_at = excluded.next_check_at,
@@ -200,7 +290,9 @@ export function upsertFeedHubSourceResult({
       config.enabled ? 1 : 0,
       config.updateFrequency,
       result.status,
-      result.itemCount,
+      storedItemCount,
+      result.rawItemCount ?? null,
+      result.normalizedItemCount ?? result.itemCount,
       fetchedAt,
       result.status === 'ok' || result.status === 'empty' ? fetchedAt : null,
       nextCheckAt,
@@ -223,7 +315,7 @@ export function upsertFeedHubSourceResult({
         updated_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(source_id, url) DO UPDATE SET
+      ON CONFLICT DO UPDATE SET
         id = excluded.id,
         source_id = excluded.source_id,
         url = excluded.url,
@@ -253,10 +345,30 @@ export function upsertFeedHubSourceResult({
   write()
 }
 
+function dedupeFeedItems(items: FeedItem[]) {
+  const itemById = new Map<string, FeedItem>()
+  const seenSourceUrls = new Set<string>()
+
+  items.forEach((item) => {
+    const sourceUrlKey = `${item.sourceId}\u0000${item.url}`
+
+    if (itemById.has(item.id) || seenSourceUrls.has(sourceUrlKey)) {
+      return
+    }
+
+    itemById.set(item.id, item)
+    seenSourceUrls.add(sourceUrlKey)
+  })
+
+  return Array.from(itemById.values())
+}
+
 function parseSourceFetchStateRow(row: SourceFetchStateRow): SourceFetchState {
   return {
     enabled: row.enabled === 1,
     itemCount: row.item_count,
+    normalizedItemCount: row.normalized_item_count ?? undefined,
+    rawItemCount: row.raw_item_count ?? undefined,
     lastCheckedAt: row.last_checked_at ?? undefined,
     lastError: row.last_error ?? undefined,
     lastFeedHash: row.last_feed_hash ?? undefined,
@@ -271,7 +383,14 @@ function parseSourceFetchStateRow(row: SourceFetchStateRow): SourceFetchState {
   }
 }
 
-function parseFeedItem(value: string) {
+function normalizeFeedHubPagination(pagination: PaginationWindow) {
+  return {
+    limit: Number.isFinite(pagination.limit) ? Math.max(1, Math.floor(pagination.limit)) : 50,
+    offset: Number.isFinite(pagination.offset) ? Math.max(0, Math.floor(pagination.offset)) : 0,
+  }
+}
+
+export function parseFeedItem(value: string) {
   try {
     const parsed = JSON.parse(value) as FeedItem
 
@@ -308,6 +427,12 @@ function createFeedHash(items: FeedItem[]) {
   return createHash('sha256')
     .update(items.map((item) => createFeedItemHash(item)).join('\n'))
     .digest('hex')
+}
+
+function getLookbackStartAt(lookbackDays: number) {
+  const dayMs = 24 * 60 * 60 * 1000
+
+  return new Date(Date.now() - lookbackDays * dayMs).toISOString()
 }
 
 function createFeedItemHash(item: FeedItem) {

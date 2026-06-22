@@ -15,7 +15,7 @@ const priorityScore: Record<SourceRegistryRecord['priority'], number> = {
   low: 62,
 }
 
-export function normalizeRSSHubItems({
+export function normalizeFeedItems({
   config,
   data,
   fetchedAt,
@@ -26,19 +26,27 @@ export function normalizeRSSHubItems({
   fetchedAt: string
   registry: SourceRegistryRecord
 }) {
-  return (data.item ?? []).slice(0, config.maxItems).map((item, index) =>
-    normalizeRSSHubItem({
-      config,
-      data,
-      fetchedAt,
-      index,
-      item,
-      registry,
-    }),
-  )
+  const lookbackStartMs = getLookbackStartMs(fetchedAt, config.lookbackDays)
+
+  const items = (data.item ?? [])
+    .map((item, index) =>
+      normalizeFeedItem({
+        config,
+        data,
+        fetchedAt,
+        index,
+        item,
+        registry,
+      }),
+    )
+    .filter((item) => new Date(item.publishedAt).getTime() >= lookbackStartMs)
+
+  return dedupeNormalizedFeedItems(items)
 }
 
-function normalizeRSSHubItem({
+export const normalizeRSSHubItems = normalizeFeedItems
+
+function normalizeFeedItem({
   config,
   data,
   fetchedAt,
@@ -55,9 +63,9 @@ function normalizeRSSHubItem({
 }): FeedItem {
   const publishedAt = normalizeDate(item.pubDate ?? item.updated ?? fetchedAt)
   const url = item.link ?? data.link ?? registry.officialUrl
-  const summary = buildSummary(item)
-  const body = buildBody(item, summary, registry, config)
   const title = stripHtml(item.title).trim() || registry.displayName
+  const summary = buildSummary(item, config, title)
+  const body = buildBody(item, summary, registry, config, url)
   const sectionLabel = sectionLabels[config.section]
   const baseScore = priorityScore[registry.priority]
 
@@ -93,7 +101,8 @@ function normalizeRSSHubItem({
       aiSummary: summary || title,
       sourceProof: [
         `Source Registry: ${registry.displayName} / ${registry.fetchMethod} / ${registry.evidenceLevel}.`,
-        `RSSHub route: ${config.rsshubRoute}.`,
+        `Adapter: ${config.adapter}.`,
+        `Endpoint: ${config.endpoint}.`,
       ],
       followUpQuestions: [
         '这条更新是否会改变 coding-agent 的日常工作流？',
@@ -105,11 +114,37 @@ function normalizeRSSHubItem({
 
 function buildItemId(sourceId: string, item: RsshubDataItem, index: number) {
   const rawId = item.guid ?? item.id ?? item.link ?? item.title ?? `${sourceId}-${index}`
-  return `rsshub-${sourceId}-${hashString(String(rawId))}`
+  return `feed-${sourceId}-${hashString(String(rawId))}`
 }
 
-function buildSummary(item: RsshubDataItem) {
-  return truncate(readItemText(item).replace(/\s+/g, ' ').trim(), 180)
+function dedupeNormalizedFeedItems(items: FeedItem[]) {
+  const itemById = new Map<string, FeedItem>()
+  const seenSourceUrls = new Set<string>()
+
+  items.forEach((item) => {
+    const sourceUrlKey = `${item.sourceId}\u0000${item.url}`
+
+    if (itemById.has(item.id) || seenSourceUrls.has(sourceUrlKey)) {
+      return
+    }
+
+    itemById.set(item.id, item)
+    seenSourceUrls.add(sourceUrlKey)
+  })
+
+  return Array.from(itemById.values())
+}
+
+function buildSummary(item: RsshubDataItem, config: FeedHubSourceConfig, title: string) {
+  if (isHackerNewsAdapter(config)) {
+    const text = readItemText(item).replace(/\s+/g, ' ').trim()
+
+    return truncate(text || `Hacker News 热门链接：${title}.`, 220)
+  }
+
+  const text = readItemText(item).replace(/\s+/g, ' ').trim()
+
+  return truncate(text || title, 180)
 }
 
 function buildBody(
@@ -117,7 +152,23 @@ function buildBody(
   summary: string,
   registry: SourceRegistryRecord,
   config: FeedHubSourceConfig,
+  url: string,
 ) {
+  if (isHackerNewsAdapter(config)) {
+    const discussionParagraphs = splitParagraphs(readItemText(item))
+
+    return [
+      `Hacker News API 只提供标题、外部链接和讨论元信息；它不是原文正文来源。外部原文链接：${url}`,
+      ...(discussionParagraphs.length
+        ? discussionParagraphs
+        : [
+            item.discussionUrl
+              ? `HN 讨论页：${item.discussionUrl}${item.metaText ? `。讨论元信息：${item.metaText}` : ''}`
+              : summary,
+          ]),
+    ]
+  }
+
   const paragraphs = splitParagraphs(readItemText(item))
 
   if (paragraphs.length) {
@@ -126,8 +177,12 @@ function buildBody(
 
   return [
     summary || `${registry.displayName} 发布了新条目，需要进一步阅读原文判断具体影响。`,
-    `${registry.whyFollow} 当前条目来自 RSSHub 路由 ${config.rsshubRoute}，原始链接保留在 evidence links 中。`,
+    `${registry.whyFollow} 当前条目来自 ${registry.fetchMethod} adapter，原始链接保留在 evidence links 中。`,
   ]
+}
+
+function isHackerNewsAdapter(config: FeedHubSourceConfig) {
+  return config.adapter === 'hackernews.api.topstories'
 }
 
 function normalizeDate(value: string | number | Date) {
@@ -138,6 +193,13 @@ function normalizeDate(value: string | number | Date) {
   }
 
   return date.toISOString()
+}
+
+function getLookbackStartMs(fetchedAt: string, lookbackDays: number) {
+  const fetchedAtMs = new Date(fetchedAt).getTime()
+  const dayMs = 24 * 60 * 60 * 1000
+
+  return (Number.isNaN(fetchedAtMs) ? Date.now() : fetchedAtMs) - lookbackDays * dayMs
 }
 
 function normalizeAuthor(author: RsshubDataItem['author']) {

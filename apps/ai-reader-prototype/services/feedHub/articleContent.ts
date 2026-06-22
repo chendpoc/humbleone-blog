@@ -8,6 +8,8 @@ import {
   type StoredArticleContent,
 } from '../articles/articleContentRepository'
 import { createArticleSourceHash } from '../articles/articleSourceHash'
+import { getReaderDatabase } from '../db/readerDatabase'
+import { feedHubWarn } from './feedHubLogger'
 
 type ArticleContentCacheEntry = {
   body: string[]
@@ -25,9 +27,32 @@ type ArticleContentCache = {
   version: 1
 }
 
+export type ResolvedArticleInput = {
+  articleId: string
+  sourceId?: string
+  sourceLanguage: 'zh-CN' | 'en'
+  title: string
+  url: string
+}
+
+export type ResolvedArticleContent = {
+  body: string[]
+  title: string
+}
+
 type ArticleContentCandidate = {
   body: string[]
   source: ArticleContentCacheEntry['source']
+}
+
+type FeedItemLookupInput = {
+  articleId?: string
+  sourceId?: string
+  url?: string
+}
+
+type FeedItemRow = {
+  item_json: string
 }
 
 const cacheDirectory = path.join(process.cwd(), '.cache', 'feed-hub')
@@ -36,6 +61,51 @@ const cacheTtlMs = 1000 * 60 * 60 * 24 * 14
 const failedCacheTtlMs = 1000 * 60 * 60 * 6
 const sufficientTextLength = 900
 const fetchTimeoutMs = Number(process.env.FEED_HUB_ARTICLE_FETCH_TIMEOUT_MS ?? 7000)
+
+export async function resolveArticleContentForAi(
+  input: ResolvedArticleInput,
+): Promise<ResolvedArticleContent | null> {
+  const articleId = input.articleId.trim()
+  const sourceId = input.sourceId?.trim()
+  const title = input.title.trim()
+  const url = input.url.trim()
+
+  if (!articleId) {
+    throw new Error('articleId is required.')
+  }
+
+  if (!title) {
+    throw new Error('title is required.')
+  }
+
+  if (!url) {
+    throw new Error('url is required.')
+  }
+
+  const feedItem = findFeedItemByIdentity({
+    articleId,
+    sourceId,
+    url,
+  })
+  const seedItem = feedItem ?? makeSeedFeedItem({
+    articleId,
+    sourceId,
+    sourceLanguage: input.sourceLanguage,
+    title,
+    url,
+  })
+  const [resolvedItem] = await hydrateFeedItemsWithArticleContent([seedItem])
+  const resolvedBody = resolvedItem.reader.body
+
+  if (!resolvedBody.length) {
+    return null
+  }
+
+  return {
+    body: resolvedBody,
+    title: resolvedItem.title.trim() || title,
+  }
+}
 
 export async function hydrateFeedItemsWithArticleContent(items: FeedItem[]) {
   if (!items.length) {
@@ -297,6 +367,99 @@ function applyArticleBody(
   }
 }
 
+function makeSeedFeedItem({
+  articleId,
+  sourceId,
+  sourceLanguage,
+  title,
+  url,
+}: {
+  articleId: string
+  sourceId?: string
+  sourceLanguage: 'zh-CN' | 'en'
+  title: string
+  url: string
+}): FeedItem {
+  const now = new Date().toISOString()
+
+  return {
+    id: articleId,
+    sourceId: sourceId ?? 'manual-source',
+    sourceName: 'manual-source',
+    sourceFamily: 'community',
+    evidenceLevel: 'rss',
+    title,
+    summary: title,
+    whyItMatters: 'AI information reader item',
+    url,
+    author: 'Manual',
+    relativeTime: 'unknown',
+    publishedAt: now,
+    fetchedAt: now,
+    tags: ['manual'],
+    importanceScore: 0,
+    noveltyScore: 0,
+    language: sourceLanguage,
+    status: 'new',
+    evidenceLinks: [{ label: 'Manual', url }],
+    reader: {
+      kicker: 'Manual source',
+      headline: title,
+      body: [],
+      aiSummary: '',
+      sourceProof: ['No cached item body, fetch by URL.'],
+      followUpQuestions: [],
+    },
+  }
+}
+
+function findFeedItemByIdentity(input: FeedItemLookupInput): FeedItem | null {
+  const trimmedArticleId = input.articleId?.trim()
+  const trimmedSourceId = input.sourceId?.trim()
+  const trimmedUrl = input.url?.trim()
+
+  if (!trimmedArticleId && !trimmedSourceId && !trimmedUrl) {
+    return null
+  }
+
+  const where: string[] = []
+  const params: string[] = []
+
+  if (trimmedSourceId) {
+    where.push('source_id = ?')
+    params.push(trimmedSourceId)
+  }
+
+  if (trimmedArticleId) {
+    where.push('id = ?')
+    params.push(trimmedArticleId)
+  } else if (trimmedUrl) {
+    where.push('url = ?')
+    params.push(trimmedUrl)
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const row = getReaderDatabase()
+    .prepare(`
+      SELECT item_json
+      FROM feed_items
+      ${whereClause}
+      ORDER BY published_at DESC
+      LIMIT 1
+    `)
+    .get(...params) as FeedItemRow | undefined
+
+  if (!row) {
+    return null
+  }
+
+  try {
+    return JSON.parse(row.item_json) as FeedItem
+  } catch {
+    return null
+  }
+}
+
 function buildStoredContentRecord(
   item: FeedItem,
   candidate: ArticleContentCandidate,
@@ -407,7 +570,10 @@ function findArticleContentByUrlSafely(url: string) {
   try {
     return findArticleContentByUrl(url)
   } catch (error) {
-    console.warn('[feed-hub] failed to read article content from database', error)
+    feedHubWarn('failed to read article content from database', {
+      error: error instanceof Error ? error.message : String(error),
+      url,
+    })
 
     return null
   }
@@ -417,6 +583,10 @@ function upsertArticleContentSafely(record: StoredArticleContent) {
   try {
     upsertArticleContent(record)
   } catch (error) {
-    console.warn('[feed-hub] failed to persist article content', error)
+    feedHubWarn('failed to persist article content', {
+      error: error instanceof Error ? error.message : String(error),
+      articleId: record.articleId,
+      url: record.url,
+    })
   }
 }

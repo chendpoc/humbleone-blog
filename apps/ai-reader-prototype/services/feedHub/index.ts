@@ -2,12 +2,21 @@ import { readFeedHubProjection } from './feedHubProjection'
 import { syncFeedHubSources, type FeedHubSyncOptions } from './feedHubSync'
 import type { FeedHubResponse } from './types'
 
-export async function getFeedHubBrief(): Promise<FeedHubResponse> {
-  return readFeedHubProjection()
+export type FeedHubProjectionOptions = {
+  limit?: number
+  offset?: number
+  sourceId?: string | null
 }
 
-export async function refreshFeedHubBrief(options: FeedHubSyncOptions = {}): Promise<FeedHubResponse> {
-  await syncFeedHubSources(options)
+export async function getFeedHubBrief(options: FeedHubProjectionOptions = {}): Promise<FeedHubResponse> {
+  return readFeedHubProjection(options)
+}
 
-  return readFeedHubProjection()
+export async function refreshFeedHubBrief(
+  syncOptions: FeedHubSyncOptions = {},
+  projectionOptions: FeedHubProjectionOptions = {},
+): Promise<FeedHubResponse> {
+  await syncFeedHubSources(syncOptions)
+
+  return readFeedHubProjection(projectionOptions)
 }

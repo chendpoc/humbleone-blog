@@ -102,6 +102,8 @@ function initializeReaderDatabase(db: Database.Database) {
       update_frequency TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('idle', 'ok', 'empty', 'failed', 'skipped')),
       item_count INTEGER NOT NULL DEFAULT 0,
+      raw_item_count INTEGER,
+      normalized_item_count INTEGER,
       last_checked_at TEXT,
       last_success_at TEXT,
       next_check_at TEXT,
@@ -148,6 +150,28 @@ function initializeReaderDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_reader_article_states_favorited
       ON reader_article_states(favorited, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS fetch_runs (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      endpoint TEXT,
+      fetch_method TEXT NOT NULL,
+      trigger_type TEXT NOT NULL CHECK (trigger_type IN ('manual', 'scheduled', 'bootstrap', 'debug')),
+      status TEXT NOT NULL CHECK (status IN ('running', 'success', 'partial', 'failed', 'empty')),
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      duration_ms INTEGER,
+      raw_item_count INTEGER NOT NULL DEFAULT 0,
+      normalized_item_count INTEGER NOT NULL DEFAULT 0,
+      inserted_count INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fetch_runs_source_started
+      ON fetch_runs(source_id, started_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_fetch_runs_started
+      ON fetch_runs(started_at DESC);
+
     CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
       article_id UNINDEXED,
       url UNINDEXED,
@@ -156,7 +180,19 @@ function initializeReaderDatabase(db: Database.Database) {
     );
   `)
 
+  ensureColumn(db, 'source_fetch_states', 'raw_item_count', 'INTEGER')
+  ensureColumn(db, 'source_fetch_states', 'normalized_item_count', 'INTEGER')
   backfillArticleSearchIndex(db)
+}
+
+function ensureColumn(db: Database.Database, tableName: string, columnName: string, definition: string) {
+  const columns = db.pragma(`table_info(${tableName})`) as Array<{ name: string }>
+
+  if (columns.some((column) => column.name === columnName)) {
+    return
+  }
+
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
 }
 
 type ArticleSearchBackfillRow = {

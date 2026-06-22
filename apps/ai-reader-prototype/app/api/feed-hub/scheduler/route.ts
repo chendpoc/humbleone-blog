@@ -27,8 +27,11 @@ async function handleSchedulerRequest(request: Request) {
       mode: 'fallback',
       fetchedAt: new Date().toISOString(),
       brief: dailyBrief,
+      pageInfo: emptyPageInfo,
       sourceResults: [
         {
+          endpoint: 'feed-hub-scheduler',
+          fetchMethod: 'manual',
           sourceId: 'feed-hub-scheduler',
           rsshubRoute: 'rsshub-package',
           itemCount: 0,
@@ -38,6 +41,14 @@ async function handleSchedulerRequest(request: Request) {
       ],
     })
   }
+}
+
+const emptyPageInfo = {
+  hasMore: false,
+  limit: 0,
+  offset: 0,
+  returnedCount: 0,
+  totalCount: 0,
 }
 
 function isSchedulerAuthorized(request: Request) {

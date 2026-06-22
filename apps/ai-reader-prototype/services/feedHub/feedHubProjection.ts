@@ -8,9 +8,13 @@ import {
 import {
   readSourceResultsFromState,
   readStoredFeedSources,
+  type StoredFeedSourcesResult,
 } from './feedHubRepository'
-import { getFeedHubRsshubSources } from './rsshubSources'
+import { getFeedHubSources } from './rsshubSources'
 import type { FeedHubResponse, FeedHubSourceConfig, FeedHubSourceResult, NormalizedFeedSource } from './types'
+
+const defaultFeedHubLimit = 20
+const maxFeedHubLimit = 200
 
 const sectionMeta: Record<DailySectionKind, Pick<DailySection, 'title' | 'description'>> = {
   hard_news: {
@@ -27,21 +31,53 @@ const sectionMeta: Record<DailySectionKind, Pick<DailySection, 'title' | 'descri
   },
 }
 
+type ReadFeedHubProjectionPagination = {
+  limit?: number
+  offset?: number
+}
+
+type FeedHubPageInfo = {
+  hasMore: boolean
+  limit: number
+  nextOffset?: number
+  offset: number
+  returnedCount: number
+  totalCount: number
+}
+
 export async function readFeedHubProjection({
   fetchedAt = new Date().toISOString(),
+  limit = defaultFeedHubLimit,
+  offset = 0,
+  sourceId,
 }: {
   fetchedAt?: string
+  limit?: number
+  offset?: number
+  sourceId?: string | null
 } = {}): Promise<FeedHubResponse> {
+  const pagination = normalizePagination({ limit, offset })
   const sourceRegistry = await loadEffectiveSourceRegistry()
-  const feedHubRsshubSources = getFeedHubRsshubSources(sourceRegistry)
-  const sourceEntries = getFeedHubSourceEntries(feedHubRsshubSources, sourceRegistry)
-  const normalizedSources = readStoredFeedSources(sourceEntries)
-  const sourceResults = readSourceResultsFromState(feedHubRsshubSources)
+  const feedHubSources = getFeedHubSources(sourceRegistry)
+  const enabledFeedHubSources = feedHubSources.filter((source) => source.enabled)
+  const sourceEntries = getFeedHubSourceEntries(enabledFeedHubSources, sourceRegistry)
+  const normalizedSourceId = sourceId?.trim()
+  const filteredSourceEntries = normalizedSourceId
+    ? sourceEntries.filter(({ config }) => config.sourceId === normalizedSourceId)
+    : sourceEntries
+  const storedSources = readStoredFeedSources(filteredSourceEntries, pagination)
+  const sourceResults = readSourceResultsFromState(feedHubSources)
 
   return buildFeedHubResponse({
     fetchedAt,
-    feedHubRsshubSources,
-    normalizedSources,
+    feedHubSources,
+    pagination: {
+      ...storedSources,
+      limit: pagination.limit,
+      offset: pagination.offset,
+    },
+    sections: buildSections(storedSources.sources),
+    selectedSourceId: normalizedSourceId,
     sourceRegistry,
     sourceResults,
   })
@@ -49,70 +85,150 @@ export async function readFeedHubProjection({
 
 function buildFeedHubResponse({
   fetchedAt,
-  feedHubRsshubSources,
-  normalizedSources,
+  feedHubSources,
+  pagination,
+  sections,
+  selectedSourceId,
   sourceRegistry,
   sourceResults,
 }: {
   fetchedAt: string
-  feedHubRsshubSources: FeedHubSourceConfig[]
-  normalizedSources: NormalizedFeedSource[]
+  feedHubSources: FeedHubSourceConfig[]
+  pagination: StoredFeedSourcesResult & { limit: number; offset: number }
+  sections: DailySection[]
+  selectedSourceId?: string
   sourceRegistry: EffectiveSourceRegistry
   sourceResults: FeedHubSourceResult[]
 }): FeedHubResponse {
-  const sections = buildSections(normalizedSources)
+  const pageInfo = buildPageInfo(pagination)
   const items = sections.flatMap((section) => section.items)
   const sourceDesk = buildSourceDesk(
-    normalizedSources,
     sourceResults,
+    getTotalSourceItemCount(sourceResults),
     fetchedAt,
     sourceRegistry,
-    feedHubRsshubSources,
+    feedHubSources,
   )
 
-  if (!items.length) {
+  if (!items.length && pageInfo.totalCount === 0) {
+    const fallbackBrief = buildFallbackBrief(selectedSourceId, sourceDesk)
+    const fallbackItemCount = fallbackBrief.sections.reduce((count, section) => count + section.items.length, 0)
+
     return {
       mode: 'fallback',
       fetchedAt,
-      brief: {
-        ...dailyBrief,
-        sourceDesk,
+      brief: fallbackBrief,
+      pageInfo: {
+        hasMore: false,
+        limit: pagination.limit,
+        offset: 0,
+        returnedCount: fallbackItemCount,
+        totalCount: fallbackItemCount,
       },
       sourceResults,
     }
   }
 
-  const selectedItemId = items[0].id
+  const selectedItemId = items[0]?.id ?? dailyBrief.selectedItemId
 
   return {
-    mode: 'rsshub',
+    mode: 'feedhub',
     fetchedAt,
     brief: {
-      id: `rsshub-${formatLocalDate(new Date(fetchedAt))}`,
+      id: `feedhub-${formatLocalDate(new Date(fetchedAt))}`,
       date: formatLocalDate(new Date(fetchedAt)),
       title: 'Today',
-      judgment: `RSSHub 已同步 ${items.length} 条 AI / coding-agent 高信号更新，优先阅读官方工程更新和工具 changelog。`,
+      judgment: `Feed Hub 已同步 ${pageInfo.totalCount} 条 AI / coding-agent 高信号更新，当前显示 ${items.length} 条。优先阅读官方工程更新、工具 changelog 和高信号社区案例。`,
       itemCount: items.length,
       selectedItemId,
-      sourceDesk,
+      sourceDesk: {
+        ...sourceDesk,
+      },
       sections,
       reader: {
         skin: 'postmodern_newspaper',
         masthead: 'AI BUILDER DAILY',
-        editionLine: `RSSHub Edition / ${formatDisplayDate(new Date(fetchedAt))} / Personal Desk`,
+        editionLine: `Feed Hub Edition / ${formatDisplayDate(new Date(fetchedAt))} / Personal Desk`,
         topicLine: 'Coding Agents, Builder Workflows, Runtime Control',
         selectedItemId,
       },
     },
+    pageInfo,
     sourceResults,
   }
 }
 
+function buildFallbackBrief(selectedSourceId: string | undefined, sourceDesk: SourceDeskData) {
+  if (!selectedSourceId) {
+    const itemCount = dailyBrief.sections.reduce((count, section) => count + section.items.length, 0)
+
+    return {
+      ...dailyBrief,
+      itemCount,
+      sourceDesk,
+    }
+  }
+
+  const sections = dailyBrief.sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => item.sourceId === selectedSourceId),
+  }))
+  const items = sections.flatMap((section) => section.items)
+  const selectedItemId = items[0]?.id ?? dailyBrief.selectedItemId
+
+  return {
+    ...dailyBrief,
+    itemCount: items.length,
+    selectedItemId,
+    reader: {
+      ...dailyBrief.reader,
+      selectedItemId,
+    },
+    sections,
+    sourceDesk,
+  }
+}
+
+function buildPageInfo(
+  pagination: {
+    hasMore: boolean
+    nextOffset?: number
+    totalCount: number
+    returnedCount: number
+    limit: number
+    offset: number
+  },
+): FeedHubPageInfo {
+  return {
+    hasMore: pagination.hasMore,
+    limit: pagination.limit,
+    ...(pagination.nextOffset ? { nextOffset: pagination.nextOffset } : {}),
+    offset: pagination.offset,
+    returnedCount: pagination.returnedCount,
+    totalCount: pagination.totalCount,
+  }
+}
+
+function normalizePagination({
+  limit,
+  offset,
+}: ReadFeedHubProjectionPagination) {
+  const normalizedLimit = typeof limit === 'number' && Number.isInteger(limit)
+    ? Math.min(Math.max(limit, 1), maxFeedHubLimit)
+    : defaultFeedHubLimit
+  const normalizedOffset = typeof offset === 'number' && Number.isInteger(offset) ? Math.max(offset, 0) : 0
+
+  return {
+    limit: normalizedLimit,
+    offset: normalizedOffset,
+  }
+}
+
 function getFeedHubSourceEntries(
-  feedHubRsshubSources: FeedHubSourceConfig[],
+  feedHubSources: FeedHubSourceConfig[],
   sourceRegistry: EffectiveSourceRegistry,
 ) {
-  return feedHubRsshubSources.flatMap((config) => {
+  return feedHubSources.flatMap((config) => {
     const registry = getSourceRegistryRecord(sourceRegistry, config.sourceId)
 
     return registry ? [{ config, registry }] : []
@@ -135,53 +251,55 @@ function buildSections(sources: NormalizedFeedSource[]): DailySection[] {
 }
 
 function buildSourceDesk(
-  sources: NormalizedFeedSource[],
   sourceResults: FeedHubSourceResult[],
+  totalSourceItemCount: number,
   fetchedAt: string,
   sourceRegistry: EffectiveSourceRegistry,
-  feedHubRsshubSources: FeedHubSourceConfig[],
+  feedHubSources: FeedHubSourceConfig[],
 ): SourceDeskData {
-  const itemsBySourceId = new Map(sources.map((source) => [source.config.sourceId, source.items]))
   const resultBySourceId = new Map(sourceResults.map((result) => [result.sourceId, result]))
-  const feedHubSourceIds = new Set(feedHubRsshubSources.map((source) => source.sourceId))
+  const feedHubSourceById = new Map(feedHubSources.map((source) => [source.sourceId, source]))
   const sourceSlips = sourceRegistry.records
     .map((registry) => {
-      const items = itemsBySourceId.get(registry.sourceId) ?? []
       const result = resultBySourceId.get(registry.sourceId)
-      const health = getSourceHealth(result)
+      const feedHubSource = feedHubSourceById.get(registry.sourceId)
+      const health = getSourceHealth(result, feedHubSource)
+      const sourceItemCount = getSourceItemCount(result)
 
       return {
         id: sourceIdToSlipId(registry.sourceId),
         kind: 'source_slip' as const,
         label: registry.displayName,
-        count: items.length || undefined,
+        count: sourceItemCount || undefined,
         sourceFamily: registry.sourceFamily,
         evidenceLevel: registry.evidenceLevel,
         health,
-        state: resolveSourceSlipState(health, items.length, feedHubSourceIds.has(registry.sourceId)),
+        state: resolveSourceSlipState(health, sourceItemCount, Boolean(feedHubSource?.enabled)),
         description: registry.whyFollow,
         contentType: registry.contentType,
         topicTags: registry.topicTags,
         adapter: registry.adapter,
+        fetchConfigurable: Boolean(feedHubSource),
+        fetchEnabled: feedHubSource?.enabled ?? false,
+        fetchLookbackDays: feedHubSource?.lookbackDays,
       }
     })
 
-  const itemCount = sources.reduce((total, source) => total + source.items.length, 0)
   const failedCount = sourceResults.filter((result) => result.status === 'failed').length
 
   return {
     ...dailyBrief.sourceDesk,
-    issueLabel: 'RSSHub v0.1',
+    issueLabel: 'Feed Hub v0.1',
     deskDate: formatDisplayDate(new Date(fetchedAt)),
     navigation: [
       {
         id: 'nav-today',
         kind: 'navigation',
         label: 'Today',
-        count: itemCount,
-        health: itemCount ? 'fresh' : 'quiet',
+        count: totalSourceItemCount,
+        health: totalSourceItemCount ? 'fresh' : 'quiet',
         state: 'selected',
-        description: '今日 RSSHub 高信号信息饮食。',
+        description: '今日 Feed Hub 高信号信息饮食。',
       },
       ...dailyBrief.sourceDesk.navigation.filter((item) => item.id !== 'nav-today'),
     ],
@@ -200,7 +318,15 @@ function buildSourceDesk(
   }
 }
 
-function resolveSourceSlipState(health: SourceHealth, itemCount: number, isFeedHubSource: boolean) {
+function getSourceItemCount(result: FeedHubSourceResult | undefined) {
+  return result?.normalizedItemCount ?? result?.fetchedItemCount ?? result?.itemCount ?? 0
+}
+
+function getTotalSourceItemCount(sourceResults: FeedHubSourceResult[]) {
+  return sourceResults.reduce((total, result) => total + getSourceItemCount(result), 0)
+}
+
+function resolveSourceSlipState(health: SourceHealth, itemCount: number, fetchEnabled: boolean) {
   if (health === 'failed') {
     return 'failed' as const
   }
@@ -209,11 +335,11 @@ function resolveSourceSlipState(health: SourceHealth, itemCount: number, isFeedH
     return 'new' as const
   }
 
-  return isFeedHubSource ? 'stale' as const : 'default' as const
+  return fetchEnabled ? 'stale' as const : 'default' as const
 }
 
-function getSourceHealth(result: FeedHubSourceResult | undefined): SourceHealth {
-  if (!result) {
+function getSourceHealth(result: FeedHubSourceResult | undefined, feedHubSource: FeedHubSourceConfig | undefined): SourceHealth {
+  if (!feedHubSource?.enabled || !result) {
     return 'quiet'
   }
 

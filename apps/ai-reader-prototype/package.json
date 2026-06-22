@@ -4,9 +4,9 @@
   "private": true,
   "description": "Throwaway Next.js prototype for the AI Builder Daily information reader.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 7788",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 7788",
     "generate:textures": "node scripts/generate-textures.mjs",
     "fetch:fonts": "node scripts/fetch-sarasa-fonts.mjs",
     "typecheck": "tsc --noEmit",
@@ -37,6 +37,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-i18next": "^17.0.8",
+    "rss-parser": "3.13.0",
     "rsshub": "1.0.0-master.2fb207b",
     "swr": "^2.4.1"
   },

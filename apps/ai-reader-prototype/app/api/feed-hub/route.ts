@@ -5,9 +5,9 @@ import type { FeedHubResponse } from '../../../services/feedHub/types'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const response = await getFeedHubBrief()
+    const response = await getFeedHubBrief(readFeedHubProjectionQuery(request))
 
     return jsonResponse(response)
   } catch (error) {
@@ -15,8 +15,11 @@ export async function GET() {
       mode: 'fallback',
       fetchedAt: new Date().toISOString(),
       brief: dailyBrief,
+      pageInfo: emptyPageInfo,
       sourceResults: [
         {
+          endpoint: 'feed-hub',
+          fetchMethod: 'manual',
           sourceId: 'feed-hub',
           rsshubRoute: 'rsshub-package',
           itemCount: 0,
@@ -26,6 +29,42 @@ export async function GET() {
       ],
     })
   }
+}
+
+const emptyPageInfo = {
+  hasMore: false,
+  limit: 50,
+  offset: 0,
+  returnedCount: 0,
+  totalCount: 0,
+}
+
+function readFeedHubProjectionQuery(request: Request) {
+  const url = new URL(request.url)
+  const offset = readOptionalInteger(url.searchParams.get('offset'))
+  const cursor = readOptionalInteger(url.searchParams.get('cursor'))
+
+  return {
+    limit: readOptionalInteger(url.searchParams.get('limit')),
+    offset: offset ?? cursor ?? 0,
+    sourceId: readOptionalString(url.searchParams.get('sourceId')),
+  }
+}
+
+function readOptionalString(value: string | null) {
+  const trimmed = value?.trim()
+
+  return trimmed || undefined
+}
+
+function readOptionalInteger(value: string | null) {
+  if (!value) {
+    return undefined
+  }
+
+  const parsed = Number(value)
+
+  return Number.isInteger(parsed) ? parsed : undefined
 }
 
 function jsonResponse(value: FeedHubResponse) {
