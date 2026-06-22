@@ -24,13 +24,13 @@ export function useArticleTranslation(article: StandardArticle, enabled: boolean
   const requestKey = useMemo(
     () => [
       article.id,
+      article.sourceId,
       article.url,
       article.title,
       article.language,
       targetLanguage,
-      article.reader.body.join('\n\n'),
     ].join('\u001f'),
-    [article.id, article.language, article.reader.body, article.title, article.url, targetLanguage],
+    [article.id, article.language, article.sourceId, article.title, article.url, targetLanguage],
   )
   const mutationKey = useMemo(() => `/api/article-translation:${requestKey}`, [requestKey])
   const completedRequestKeyRef = useRef<string | null>(null)
@@ -73,7 +73,7 @@ export function useArticleTranslation(article: StandardArticle, enabled: boolean
     void trigger({
       payload: {
         articleId: article.id,
-        body: article.reader.body,
+        sourceId: article.sourceId,
         sourceLanguage: article.language,
         targetLanguage,
         title: article.title,

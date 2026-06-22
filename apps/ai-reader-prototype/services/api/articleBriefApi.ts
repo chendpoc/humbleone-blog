@@ -4,9 +4,9 @@ export type ArticleBriefLanguage = 'zh-CN' | 'en'
 
 export type ArticleBriefRequest = {
   articleId: string
-  body: string[]
   sourceLanguage: ArticleBriefLanguage
   targetLanguage?: ArticleBriefLanguage
+  sourceId?: string
   title: string
   url: string
 }

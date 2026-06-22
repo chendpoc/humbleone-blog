@@ -4,9 +4,9 @@ export type ArticleTranslationLanguage = 'zh-CN' | 'en'
 
 export type ArticleTranslationRequest = {
   articleId: string
-  body: string[]
   sourceLanguage: ArticleTranslationLanguage
   targetLanguage: ArticleTranslationLanguage
+  sourceId?: string
   title: string
   url: string
 }

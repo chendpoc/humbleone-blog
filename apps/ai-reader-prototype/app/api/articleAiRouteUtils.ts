@@ -2,8 +2,8 @@ export type ArticleAiLanguage = 'zh-CN' | 'en'
 
 export type ArticleAiBaseInput = {
   articleId: string
-  body: string[]
   sourceLanguage: ArticleAiLanguage
+  sourceId?: string
   targetLanguage?: ArticleAiLanguage
   title: string
   url: string
@@ -18,8 +18,8 @@ export function parseArticleAiBaseInput(value: unknown, payloadLabel: string): A
 
   return {
     articleId: readRequiredString(record.articleId, 'articleId'),
-    body: readRequiredStringArray(record.body, 'body'),
     sourceLanguage: parseArticleAiLanguage(record.sourceLanguage, 'sourceLanguage'),
+    sourceId: readOptionalString(record.sourceId),
     targetLanguage: record.targetLanguage
       ? parseArticleAiLanguage(record.targetLanguage, 'targetLanguage')
       : undefined,
@@ -66,18 +66,8 @@ function readRequiredString(value: unknown, field: string) {
   return value.trim()
 }
 
-function readRequiredStringArray(value: unknown, field: string) {
-  if (!Array.isArray(value)) {
-    throw new Error(`${field} must be an array of strings.`)
-  }
-
-  return value.map((item) => {
-    if (typeof item !== 'string') {
-      throw new Error(`${field} must be an array of strings.`)
-    }
-
-    return item
-  })
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function parseArticleAiLanguage(value: unknown, field: string): ArticleAiLanguage {

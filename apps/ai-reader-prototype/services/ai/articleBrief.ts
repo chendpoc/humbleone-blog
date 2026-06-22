@@ -6,16 +6,21 @@ import {
   truncateArticleBody,
 } from './deepSeekJson'
 import {
+  resolveArticleContentForAi,
+  type ResolvedArticleInput as ResolvedArticleForAiInput,
+} from '../feedHub/articleContent'
+import {
   findArticleAiOutput,
   upsertArticleAiOutput,
   type StoredArticleAiOutput,
 } from './articleAiOutputRepository'
+import { readerLogger } from '../logging/readerLogger'
 
 export type ArticleBriefInput = {
   articleId: string
-  body: string[]
   sourceLanguage: 'zh-CN' | 'en'
   targetLanguage?: 'zh-CN' | 'en'
+  sourceId?: string
   title: string
   url: string
 }
@@ -36,6 +41,15 @@ type DeepSeekBriefPayload = {
   keyPoints: string[]
 }
 
+type ResolvedArticleBriefInput = ArticleBriefInput & {
+  body: string[]
+}
+
+type NormalizedArticleBriefInput = Omit<Required<ArticleBriefInput>, 'sourceId'> & {
+  body: string[]
+  sourceId?: string
+}
+
 const provider = 'deepseek' as const
 const defaultModel = 'deepseek-v4-flash'
 const promptVersion = 'article-brief-v1'
@@ -43,7 +57,17 @@ const requestTimeoutMs = Number(process.env.DEEPSEEK_BRIEF_TIMEOUT_MS ?? process
 const maxArticleChars = Number(process.env.DEEPSEEK_BRIEF_MAX_CHARS ?? 45000)
 
 export async function generateArticleBrief(input: ArticleBriefInput): Promise<ArticleBriefResult> {
-  const normalizedInput = normalizeBriefInput(input)
+  const resolvedInput = await resolveArticleContentInput({
+    articleId: input.articleId,
+    sourceId: input.sourceId,
+    sourceLanguage: input.sourceLanguage,
+    title: input.title,
+    url: input.url,
+  })
+  const normalizedInput = normalizeBriefInput({
+    ...input,
+    ...resolvedInput,
+  })
   const model = process.env.DEEPSEEK_BRIEF_MODEL ?? process.env.DEEPSEEK_TRANSLATION_MODEL ?? defaultModel
   const inputHash = createArticleSourceHash(normalizedInput)
   const language = normalizedInput.targetLanguage ?? 'zh-CN'
@@ -98,8 +122,24 @@ export async function generateArticleBrief(input: ArticleBriefInput): Promise<Ar
   return toBriefResult(record, brief, false)
 }
 
-function normalizeBriefInput(input: ArticleBriefInput): Required<ArticleBriefInput> {
+async function resolveArticleContentInput(
+  input: Pick<ArticleBriefInput, 'articleId' | 'sourceId' | 'sourceLanguage' | 'title' | 'url'>,
+) {
+  const resolvedContent = await resolveArticleContentForAi(input as ResolvedArticleForAiInput)
+
+  if (!resolvedContent) {
+    throw new Error(`Unable to resolve article body for ai-brief from cache or source URL for ${input.url}.`)
+  }
+
+  return {
+    body: resolvedContent.body,
+    title: resolvedContent.title,
+  }
+}
+
+function normalizeBriefInput(input: ResolvedArticleBriefInput): NormalizedArticleBriefInput {
   const title = input.title.trim()
+  const sourceId = input.sourceId?.trim()
   const body = truncateArticleBody(
     normalizeArticleParagraphs(input.body),
     maxArticleChars,
@@ -124,6 +164,7 @@ function normalizeBriefInput(input: ArticleBriefInput): Required<ArticleBriefInp
   return {
     articleId: input.articleId.trim(),
     body,
+    ...(sourceId ? { sourceId } : {}),
     sourceLanguage: input.sourceLanguage,
     targetLanguage: input.targetLanguage ?? 'zh-CN',
     title,
@@ -138,7 +179,7 @@ async function requestDeepSeekBrief({
   targetLanguage,
 }: {
   apiKey: string
-  input: Required<ArticleBriefInput>
+  input: NormalizedArticleBriefInput
   model: string
   targetLanguage: 'zh-CN' | 'en'
 }): Promise<DeepSeekBriefPayload> {
@@ -178,9 +219,9 @@ function parseBriefPayload(content: string): DeepSeekBriefPayload {
   const body = typeof parsed.body === 'string' ? parsed.body.replace(/\s+/g, ' ').trim() : ''
   const keyPoints = Array.isArray(parsed.keyPoints)
     ? parsed.keyPoints
-        .map((point) => typeof point === 'string' ? point.replace(/\s+/g, ' ').trim() : '')
-        .filter(Boolean)
-        .slice(0, 5)
+      .map((point) => typeof point === 'string' ? point.replace(/\s+/g, ' ').trim() : '')
+      .filter(Boolean)
+      .slice(0, 5)
     : []
 
   if (!body || !keyPoints.length) {
@@ -196,7 +237,10 @@ function findArticleAiOutputSafely(
   try {
     return findArticleAiOutput(lookup)
   } catch (error) {
-    console.warn('[ai] failed to read article brief from database', error)
+    readerLogger.warn('ai', 'failed to read article brief from database', {
+      error: error instanceof Error ? error.message : String(error),
+      url: lookup.url,
+    })
 
     return null
   }
@@ -206,7 +250,11 @@ function upsertArticleAiOutputSafely(record: StoredArticleAiOutput) {
   try {
     upsertArticleAiOutput(record)
   } catch (error) {
-    console.warn('[ai] failed to persist article brief', error)
+    readerLogger.warn('ai', 'failed to persist article brief', {
+      error: error instanceof Error ? error.message : String(error),
+      articleId: record.articleId,
+      url: record.url,
+    })
   }
 }
 

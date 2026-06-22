@@ -9,18 +9,23 @@ import {
 } from '../ai/deepSeekJson'
 import { createArticleSourceHash } from '../articles/articleSourceHash'
 import {
+  resolveArticleContentForAi,
+  type ResolvedArticleInput as ResolvedArticleForAiInput,
+} from '../feedHub/articleContent'
+import {
   findArticleTranslation,
   upsertArticleTranslation,
   type StoredArticleTranslation,
 } from './articleTranslationRepository'
+import { readerLogger } from '../logging/readerLogger'
 
 export type ArticleTranslationLanguage = 'zh-CN' | 'en'
 
 export type ArticleTranslationInput = {
   articleId: string
-  body: string[]
   sourceLanguage: ArticleTranslationLanguage
   targetLanguage: ArticleTranslationLanguage
+  sourceId?: string
   title: string
   url: string
 }
@@ -49,6 +54,10 @@ type DeepSeekTranslationPayload = {
   title: string
 }
 
+type ResolvedArticleTranslationInput = ArticleTranslationInput & {
+  body: string[]
+}
+
 const cacheDirectory = path.join(process.cwd(), '.cache', 'feed-hub')
 const cachePath = path.join(cacheDirectory, 'article-translations-v1.json')
 const provider = 'deepseek' as const
@@ -58,7 +67,17 @@ const requestTimeoutMs = Number(process.env.DEEPSEEK_TRANSLATION_TIMEOUT_MS ?? 9
 const maxArticleChars = Number(process.env.DEEPSEEK_TRANSLATION_MAX_CHARS ?? 90000)
 
 export async function translateArticle(input: ArticleTranslationInput): Promise<ArticleTranslationResult> {
-  const normalizedInput = normalizeTranslationInput(input)
+  const resolvedInput = await resolveArticleContentInput({
+    articleId: input.articleId,
+    sourceId: input.sourceId,
+    sourceLanguage: input.sourceLanguage,
+    title: input.title,
+    url: input.url,
+  })
+  const normalizedInput = normalizeTranslationInput({
+    ...input,
+    ...resolvedInput,
+  })
   const model = process.env.DEEPSEEK_TRANSLATION_MODEL ?? defaultModel
   const sourceHash = createArticleSourceHash(normalizedInput)
   const storedEntry = findArticleTranslationSafely({
@@ -126,7 +145,7 @@ function buildStoredTranslationRecord({
   result,
   sourceHash,
 }: {
-  input: ArticleTranslationInput
+  input: ResolvedArticleTranslationInput
   result: ArticleTranslationCacheEntry
   sourceHash: string
 }): StoredArticleTranslation {
@@ -154,7 +173,10 @@ function findArticleTranslationSafely(
   try {
     return findArticleTranslation(lookup)
   } catch (error) {
-    console.warn('[translation] failed to read article translation from database', error)
+    readerLogger.warn('translation', 'failed to read article translation from database', {
+      error: error instanceof Error ? error.message : String(error),
+      url: lookup.url,
+    })
 
     return null
   }
@@ -164,7 +186,11 @@ function upsertArticleTranslationSafely(record: StoredArticleTranslation) {
   try {
     upsertArticleTranslation(record)
   } catch (error) {
-    console.warn('[translation] failed to persist article translation', error)
+    readerLogger.warn('translation', 'failed to persist article translation', {
+      error: error instanceof Error ? error.message : String(error),
+      articleId: record.articleId,
+      url: record.url,
+    })
   }
 }
 
@@ -185,7 +211,7 @@ function toTranslationResult(
   }
 }
 
-function normalizeTranslationInput(input: ArticleTranslationInput): ArticleTranslationInput {
+function normalizeTranslationInput(input: ResolvedArticleTranslationInput): ResolvedArticleTranslationInput {
   const body = normalizeArticleParagraphs(input.body)
   const title = input.title.trim()
   const truncatedBody = truncateArticleBody(body, maxArticleChars)
@@ -221,7 +247,7 @@ async function requestDeepSeekTranslation({
   model,
 }: {
   apiKey: string
-  input: ArticleTranslationInput
+  input: ResolvedArticleTranslationInput
   model: string
 }): Promise<DeepSeekTranslationPayload> {
   const content = await requestDeepSeekJsonContent({
@@ -248,7 +274,7 @@ function buildTranslationSystemPrompt(targetLanguage: ArticleTranslationLanguage
   ].join('\n')
 }
 
-function buildTranslationUserPrompt(input: ArticleTranslationInput) {
+function buildTranslationUserPrompt(input: ResolvedArticleTranslationInput) {
   return JSON.stringify({
     body: input.body,
     sourceLanguage: input.sourceLanguage,
@@ -263,8 +289,8 @@ function parseTranslationPayload(content: string): DeepSeekTranslationPayload {
   const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
   const body = Array.isArray(parsed.body)
     ? parsed.body
-        .map((paragraph) => typeof paragraph === 'string' ? paragraph.replace(/\s+/g, ' ').trim() : '')
-        .filter(Boolean)
+      .map((paragraph) => typeof paragraph === 'string' ? paragraph.replace(/\s+/g, ' ').trim() : '')
+      .filter(Boolean)
     : []
 
   if (!title || !body.length) {
@@ -274,6 +300,21 @@ function parseTranslationPayload(content: string): DeepSeekTranslationPayload {
   return {
     body,
     title,
+  }
+}
+
+async function resolveArticleContentInput(
+  input: Pick<ArticleTranslationInput, 'articleId' | 'sourceId' | 'sourceLanguage' | 'title' | 'url'>,
+) {
+  const resolvedContent = await resolveArticleContentForAi(input as ResolvedArticleForAiInput)
+
+  if (!resolvedContent) {
+    throw new Error(`Unable to resolve article body for ai-translation from cache or source URL for ${input.url}.`)
+  }
+
+  return {
+    body: resolvedContent.body,
+    title: resolvedContent.title,
   }
 }
 

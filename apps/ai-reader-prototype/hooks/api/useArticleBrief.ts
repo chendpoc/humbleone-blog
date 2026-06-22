@@ -22,12 +22,12 @@ export function useArticleBrief(article: StandardArticle, enabled: boolean) {
   const requestKey = useMemo(
     () => [
       article.id,
+      article.sourceId,
       article.url,
       article.title,
       article.language,
-      article.reader.body.join('\n\n'),
     ].join('\u001f'),
-    [article.id, article.language, article.reader.body, article.title, article.url],
+    [article.id, article.language, article.sourceId, article.title, article.url],
   )
   const mutationKey = useMemo(() => `/api/article-brief:${requestKey}`, [requestKey])
   const completedRequestKeyRef = useRef<string | null>(null)
@@ -70,7 +70,7 @@ export function useArticleBrief(article: StandardArticle, enabled: boolean) {
     void trigger({
       payload: {
         articleId: article.id,
-        body: article.reader.body,
+        sourceId: article.sourceId,
         sourceLanguage: article.language,
         targetLanguage: 'zh-CN',
         title: article.title,
