@@ -1,19 +1,16 @@
+import { init, request } from 'rsshub'
+
 import type { RsshubData } from './types'
-import rsshub from 'rsshub';
 
-type RSSHubModule = {
-  init: (config?: Record<string, string | undefined>) => Promise<void>
-  request: (path: string) => Promise<RsshubData>
-}
+/** RSSHub `init()` config (`ConfigEnv` in the library; not exported). */
+export type RSSHubInitConfig = NonNullable<Parameters<typeof init>[0]>
 
-let rsshubModulePromise: Promise<RSSHubModule> | null = null
+type ReaderRSSHubRuntimeConfig = Pick<
+  RSSHubInitConfig,
+  'CACHE_TYPE' | 'LOGGER_LEVEL' | 'NO_LOGFILES' | 'REQUEST_TIMEOUT'
+>
+
 let rsshubInitPromise: Promise<void> | null = null
-
-async function loadRSSHub() {
-  setRSSHubEnvironmentDefaults()
-  rsshubModulePromise ??= import('rsshub') as Promise<RSSHubModule>
-  return rsshubModulePromise
-}
 
 export function buildRSSHubRequestPath(route: string) {
   const trimmedRoute = route.trim()
@@ -45,14 +42,13 @@ function ensureLeadingSlash(path: string) {
 
 export async function requestRSSHubRoute(route: string) {
   const requestPath = buildRSSHubRequestPath(route)
-  const rsshub = await loadRSSHub()
 
-  await ensureRSSHubInitialized(rsshub)
+  await ensureRSSHubInitialized()
 
-  return rsshub.request(requestPath)
+  return request(requestPath) as Promise<RsshubData>
 }
 
-function getRSSHubInitConfig() {
+function getRSSHubInitConfig(): ReaderRSSHubRuntimeConfig {
   return {
     CACHE_TYPE: 'memory',
     LOGGER_LEVEL: process.env.RSSHUB_LOGGER_LEVEL ?? 'error',
@@ -61,17 +57,11 @@ function getRSSHubInitConfig() {
   }
 }
 
-async function ensureRSSHubInitialized(rsshub: RSSHubModule) {
-  rsshubInitPromise ??= rsshub.init(getRSSHubInitConfig()).catch((error) => {
+async function ensureRSSHubInitialized() {
+  rsshubInitPromise ??= init(getRSSHubInitConfig()).catch((error) => {
     rsshubInitPromise = null
     throw error
   })
 
   await rsshubInitPromise
-}
-
-function setRSSHubEnvironmentDefaults() {
-  process.env.IS_PACKAGE ??= 'true'
-  process.env.LOGGER_LEVEL ??= 'error'
-  process.env.NO_LOGFILES ??= 'true'
 }
